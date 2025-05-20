@@ -360,14 +360,39 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   // Berechnet die Position eines Feldes auf dem Spielbrett
   Offset _calculateFieldPosition(int index, double boardSize) {
-    final center = boardSize / 2;
-    final radius = boardSize * 0.4;
-    final angle = 2 * pi * index / GameState.totalFields;
+    final fieldSize = boardSize / 11;
     
-    return Offset(
-      center + radius * cos(angle),
-      center + radius * sin(angle),
-    );
+    // Startpositionen für jede Seite des Bretts
+    final positions = <List<int>>[
+      // Obere Reihe (links nach rechts)
+      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      // Rechte Spalte (oben nach unten)
+      [11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+      // Untere Reihe (rechts nach links)
+      [21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31],
+      // Linke Spalte (unten nach oben)
+      [32, 33, 34, 35, 36, 37, 38, 39, 40],
+    ];
+    
+    // Finde die Position im Array
+    for (int side = 0; side < positions.length; side++) {
+      final sideIndex = positions[side].indexOf(index);
+      if (sideIndex != -1) {
+        switch (side) {
+          case 0: // Obere Reihe
+            return Offset(sideIndex * fieldSize + fieldSize/2, 5 * fieldSize + fieldSize/2);
+          case 1: // Rechte Spalte
+            return Offset(5 * fieldSize + fieldSize/2, sideIndex * fieldSize + fieldSize/2);
+          case 2: // Untere Reihe
+            return Offset((10 - sideIndex) * fieldSize + fieldSize/2, 5 * fieldSize + fieldSize/2);
+          case 3: // Linke Spalte
+            return Offset(5 * fieldSize + fieldSize/2, (10 - sideIndex) * fieldSize + fieldSize/2);
+        }
+      }
+    }
+    
+    // Fallback für ungültige Indizes
+    return Offset(5 * fieldSize + fieldSize/2, 5 * fieldSize + fieldSize/2);
   }
 
   // Gibt die Farbe für einen Spieler zurück
@@ -409,61 +434,139 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 class GameBoardPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width * 0.4;
+    final boardSize = size.width;
+    final fieldSize = boardSize / 11; // 11x11 Raster für das Spielbrett
     
     // Hintergrund
     final backgroundPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.fill;
     
-    canvas.drawCircle(center, size.width / 2, backgroundPaint);
+    canvas.drawRect(Offset.zero & size, backgroundPaint);
     
-    // Spielfeld-Umriss
+    // Spielbrett-Umriss
     final outlinePaint = Paint()
       ..color = Colors.black.withOpacity(0.5)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
     
-    canvas.drawCircle(center, radius, outlinePaint);
+    // Farbfelder für die Spieler
+    final colors = [Colors.red, Colors.blue, Colors.green, Colors.yellow];
+    final homePositions = [
+      [0, 0], // Rot (oben links)
+      [6, 0], // Blau (oben rechts)
+      [6, 6], // Grün (unten rechts)
+      [0, 6], // Gelb (unten links)
+    ];
     
-    // Spielfelder
-    final fieldPaint = Paint()
+    // Zeichne die Heimatfelder
+    for (int i = 0; i < 4; i++) {
+      final color = colors[i];
+      final pos = homePositions[i];
+      final rect = Rect.fromLTWH(
+        pos[0] * fieldSize,
+        pos[1] * fieldSize,
+        fieldSize * 4,
+        fieldSize * 4
+      );
+      
+      final homePaint = Paint()
+        ..color = color.withOpacity(0.2)
+        ..style = PaintingStyle.fill;
+      
+      canvas.drawRect(rect, homePaint);
+      canvas.drawRect(rect, outlinePaint);
+      
+      // Startfelder in den Ecken
+      for (int j = 0; j < 4; j++) {
+        final startX = pos[0] * fieldSize + (j % 2) * fieldSize * 2 + fieldSize;
+        final startY = pos[1] * fieldSize + (j ~/ 2) * fieldSize * 2 + fieldSize;
+        
+        final startPaint = Paint()
+          ..color = color
+          ..style = PaintingStyle.fill;
+        
+        canvas.drawCircle(
+          Offset(startX, startY),
+          fieldSize * 0.4,
+          startPaint
+        );
+      }
+    }
+    
+    // Zielfelder zeichnen
+    final zielPaths = [
+      [5, 1, 5, 4], // Rot (von oben)
+      [6, 5, 9, 5], // Blau (von rechts)
+      [5, 6, 5, 9], // Grün (von unten)
+      [4, 5, 1, 5], // Gelb (von links)
+    ];
+    
+    for (int i = 0; i < 4; i++) {
+      final color = colors[i];
+      final path = zielPaths[i];
+      final isVertical = path[0] == path[2];
+      
+      for (int j = 0; j < 4; j++) {
+        final x = isVertical ? path[0] : path[0] + j;
+        final y = isVertical ? path[1] + j : path[1];
+        
+        final zielPaint = Paint()
+          ..color = color.withOpacity(0.3)
+          ..style = PaintingStyle.fill;
+        
+        canvas.drawCircle(
+          Offset(x * fieldSize + fieldSize/2, y * fieldSize + fieldSize/2),
+          fieldSize * 0.4,
+          zielPaint
+        );
+      }
+    }
+    
+    // Spielfeld-Pfad zeichnen
+    final pathPaint = Paint()
       ..color = Colors.grey.shade300
       ..style = PaintingStyle.fill;
     
-    final fieldOutlinePaint = Paint()
+    // Obere Reihe
+    for (int i = 0; i < 11; i++) {
+      if (i != 5) { // Nicht über Zielfelder zeichnen
+        canvas.drawCircle(
+          Offset(i * fieldSize + fieldSize/2, 5 * fieldSize + fieldSize/2),
+          fieldSize * 0.4,
+          pathPaint
+        );
+      }
+    }
+    
+    // Linke Spalte
+    for (int i = 0; i < 11; i++) {
+      if (i != 5) { // Nicht über Zielfelder zeichnen
+        canvas.drawCircle(
+          Offset(5 * fieldSize + fieldSize/2, i * fieldSize + fieldSize/2),
+          fieldSize * 0.4,
+          pathPaint
+        );
+      }
+    }
+    
+    // Gitterlinien
+    final gridPaint = Paint()
       ..color = Colors.grey.shade400
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     
-    for (int i = 0; i < 52; i++) {
-      final angle = 2 * pi * i / 52;
-      final fieldCenter = Offset(
-        center.dx + radius * cos(angle),
-        center.dy + radius * sin(angle),
+    for (int i = 0; i <= 11; i++) {
+      canvas.drawLine(
+        Offset(i * fieldSize, 0),
+        Offset(i * fieldSize, boardSize),
+        gridPaint
       );
-      
-      canvas.drawCircle(fieldCenter, size.width / 30, fieldPaint);
-      canvas.drawCircle(fieldCenter, size.width / 30, fieldOutlinePaint);
-    }
-    
-    // Startpositionen markieren
-    final startPositions = [0, 13, 26, 39];
-    final startColors = [Colors.red, Colors.blue, Colors.green, Colors.yellow];
-    
-    for (int i = 0; i < startPositions.length; i++) {
-      final angle = 2 * pi * startPositions[i] / 52;
-      final startCenter = Offset(
-        center.dx + radius * cos(angle),
-        center.dy + radius * sin(angle),
+      canvas.drawLine(
+        Offset(0, i * fieldSize),
+        Offset(boardSize, i * fieldSize),
+        gridPaint
       );
-      
-      final startPaint = Paint()
-        ..color = startColors[i]
-        ..style = PaintingStyle.fill;
-      
-      canvas.drawCircle(startCenter, size.width / 25, startPaint);
     }
   }
 

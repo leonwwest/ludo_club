@@ -61,10 +61,10 @@ class GameProvider extends ChangeNotifier {
   /// Startet ein neues Spiel mit den angegebenen Spielern
   void startNewGame(List<Player> players) {
     final startIndices = <String, int>{
-      'player1': 0,
-      'player2': 13,
-      'player3': 26,
-      'player4': 39,
+      'player1': 0,    // Rot (oben)
+      'player2': 10,   // Blau (rechts)
+      'player3': 20,   // Grün (unten)
+      'player4': 30,   // Gelb (links)
     };
     
     _gameState = GameState(

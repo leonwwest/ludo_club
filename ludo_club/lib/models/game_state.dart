@@ -14,7 +14,7 @@ class GameState {
   int? lastDiceValue;
   int currentRollCount;
 
-  static const int totalFields = 52;
+  static const int totalFields = 40;
 
   GameState({
     required this.startIndex,
