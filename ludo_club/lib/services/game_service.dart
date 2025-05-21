@@ -18,7 +18,9 @@ class GameService {
     state.lastDiceValue = value;
     state.currentRollCount++;
 
-    if (value != 6 || state.currentRollCount >= 3) {
+    if (value != 6 && state.currentRollCount >= 1) {
+      _endTurn();
+    } else if (state.currentRollCount >= 3) {
       _endTurn();
     }
     
@@ -35,28 +37,61 @@ class GameService {
 
   /// Bewegt eine Figur, wendet Safe- und Schlag-Logik an.
   bool moveToken(String playerId, int targetIndex) {
-    // Prüfen, ob der Zug gültig ist
-    if (!isValidMove(playerId, targetIndex)) {
+    final player = state.players.firstWhere((p) => p.id == playerId);
+    final diceValue = state.lastDiceValue;
+    
+    if (diceValue == null) return false;
+    
+    // Wenn die Figur im Heimatfeld ist und eine 6 gewürfelt wurde
+    if (player.position == -1) {
+      if (diceValue == 6) {
+        // Prüfen, ob noch Figuren im Heimatfeld sind
+        if (player.moveFromHome()) {
+          // Setze die Figur auf das Startfeld
+          player.position = state.startIndex[playerId]!;
+          return true;
+        }
+        return false;
+      }
       return false;
     }
     
-    if (state.isSafeField(targetIndex, playerId)) {
-      _setPosition(playerId, targetIndex);
-      return true;
+    // Berechne die neue Position
+    int newPos = (player.position + diceValue) % GameState.totalFields;
+    
+    // Überprüfe, ob die Zielposition mit der erwarteten übereinstimmt
+    if (newPos != targetIndex) return false;
+    
+    // Animation für die Bewegung
+    _animateMovement(player.position, newPos);
+    
+    // Überprüfe auf andere Spieler auf dem Zielfeld
+    if (!state.isSafeField(newPos, playerId)) {
+      for (var other in state.players.where((p) => p.id != playerId)) {
+        if (other.position == newPos) {
+          // Schlage die Figur und schicke sie zurück zum Heimatfeld
+          _animateMovement(other.position, -1); // Animation zurück ins Haus
+          other.position = -1;
+          other.homePositions[0] = -1; // Eine Figur zurück ins Heimatfeld
+        }
+      }
     }
     
-    // Gegner schlagen
-    for (var opp in state.players.where((p) =>
-        p.position == targetIndex && p.id != playerId)) {
-      opp.position = state.startIndex[opp.id]!;
+    // Bewege die Figur
+    player.position = newPos;
+    
+    // Wenn keine 6 gewürfelt wurde oder 3 Würfe erreicht sind, beende den Zug
+    if (diceValue != 6 || state.currentRollCount >= 3) {
+      _endTurn();
     }
     
-    _setPosition(playerId, targetIndex);
     return true;
   }
-
-  void _setPosition(String playerId, int pos) {
-    state.players.firstWhere((p) => p.id == playerId).position = pos;
+  
+  // Simuliert eine Animation für die Bewegung
+  void _animateMovement(int from, int to) {
+    // Diese Methode dient nur als Platzhalter für die Animation
+    // In einer realen Implementierung würde hier die Animation gesteuert werden
   }
   
   /// Prüft, ob ein Zug gültig ist
@@ -64,49 +99,53 @@ class GameService {
     final player = state.players.firstWhere((p) => p.id == playerId);
     final diceValue = state.lastDiceValue;
     
-    // Kein Würfelwert vorhanden
-    if (diceValue == null) {
-      return false;
+    if (diceValue == null) return false;
+    
+    // Wenn Figur im Heimatfeld ist, prüfe ob eine 6 gewürfelt wurde
+    if (player.position == -1) {
+      return diceValue == 6 && player.homePositions.contains(-1) && 
+             targetIndex == state.startIndex[playerId];
     }
     
-    // Prüfen, ob der Zug der Würfelzahl entspricht
+    // Berechne die erwartete Zielposition
     final expectedTarget = (player.position + diceValue) % GameState.totalFields;
     return targetIndex == expectedTarget;
   }
   
   /// Berechnet mögliche Züge für den aktuellen Spieler
   List<int> getPossibleMoves() {
-    if (state.lastDiceValue == null) {
+    if (state.lastDiceValue == null) return [];
+    
+    final player = state.players.firstWhere((p) => p.id == state.currentTurnPlayerId);
+    final diceValue = state.lastDiceValue!;
+    
+    // Wenn die Figur im Heimatfeld ist
+    if (player.position == -1) {
+      // Nur bei einer 6 kann die Figur herausgesetzt werden
+      if (diceValue == 6 && player.homePositions.contains(-1)) {
+        return [state.startIndex[player.id]!];
+      }
       return [];
     }
     
-    final player = state.players.firstWhere((p) => p.id == state.currentTurnPlayerId);
-    final targetPos = (player.position + state.lastDiceValue!) % GameState.totalFields;
-    
+    // Berechne die mögliche Zielposition
+    final targetPos = (player.position + diceValue) % GameState.totalFields;
     return [targetPos];
   }
   
   /// KI-Logik für automatische Züge
   void makeAIMove() {
-    if (!state.isCurrentPlayerAI) {
-      return;
-    }
+    if (!state.isCurrentPlayerAI) return;
     
-    // Würfeln
-    rollDice();
-    
-    // Wenn kein Würfelwert mehr vorhanden ist (z.B. nach _endTurn), beenden
+    // Zuerst würfeln
     if (state.lastDiceValue == null) {
-      return;
+      rollDice();
     }
     
-    // Mögliche Züge ermitteln
     final moves = getPossibleMoves();
-    if (moves.isEmpty) {
-      return;
-    }
+    if (moves.isEmpty) return;
     
-    // Einfache KI-Strategie: Ersten möglichen Zug ausführen
+    // Einfache KI-Strategie: Führe den ersten möglichen Zug aus
     moveToken(state.currentTurnPlayerId, moves.first);
   }
 }
