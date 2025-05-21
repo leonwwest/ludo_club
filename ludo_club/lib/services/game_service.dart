@@ -168,7 +168,7 @@ class GameService {
       bool hasWon = player.tokenPositions.every((pos) => pos == GameState.finishedPosition);
       if (hasWon) {
         // Spielgewinn-Logik hier implementieren
-        // z.B. state.winner = player.id;
+        state.winnerId = player.id;
       }
       
       // Nach einem Zug ins Ziel darf der Spieler nochmal würfeln (Bonus-Regel)

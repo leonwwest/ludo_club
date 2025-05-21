@@ -18,6 +18,7 @@ class GameState {
   String currentTurnPlayerId;
   int? lastDiceValue;
   int currentRollCount;
+  String? winnerId; // ID des Spielers, der gewonnen hat (null wenn Spiel läuft)
 
   static const int tokensPerPlayer = 4;
   static const int basePosition = -1; // Figur in der Basis
@@ -31,6 +32,7 @@ class GameState {
     required this.currentTurnPlayerId,
     this.lastDiceValue,
     this.currentRollCount = 0,
+    this.winnerId,
   });
 
   /// Prüft, ob das Feld eine Safe Zone für den Spieler ist.
@@ -56,6 +58,14 @@ class GameState {
   /// Prüft, ob der aktuelle Spieler eine KI ist
   bool get isCurrentPlayerAI => currentPlayer.isAI;
   
+  /// Gibt den Gewinner zurück, falls es einen gibt
+  Player? get winner => winnerId != null 
+      ? players.firstWhere((p) => p.id == winnerId)
+      : null;
+  
+  /// Prüft, ob das Spiel beendet ist
+  bool get isGameOver => winnerId != null;
+  
   /// Erstellt eine Kopie des aktuellen GameState
   GameState copy() {
     return GameState(
@@ -64,6 +74,7 @@ class GameState {
       currentTurnPlayerId: currentTurnPlayerId,
       lastDiceValue: lastDiceValue,
       currentRollCount: currentRollCount,
+      winnerId: winnerId,
     );
   }
 }

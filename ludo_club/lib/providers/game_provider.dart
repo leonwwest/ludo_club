@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import '../models/game_state.dart';
 import '../services/game_service.dart';
+import '../services/save_load_service.dart';
 
 class GameProvider extends ChangeNotifier {
   GameState _gameState;
   GameService _gameService;
+  final SaveLoadService _saveLoadService = SaveLoadService();
   bool _isAnimating = false;
   
   GameProvider(this._gameState) : _gameService = GameService(_gameState);
@@ -76,9 +78,41 @@ class GameProvider extends ChangeNotifier {
       startIndex: startIndices,
       players: players,
       currentTurnPlayerId: players.first.id,
+      winnerId: null, // Kein Gewinner bei Spielstart
     );
     
     _gameService = GameService(_gameState);
     notifyListeners();
+  }
+
+  /// Speichert das aktuelle Spiel
+  Future<bool> saveGame({String? customName}) async {
+    return await _saveLoadService.saveGame(_gameState, customName: customName);
+  }
+  
+  /// Lädt ein gespeichertes Spiel nach Index
+  Future<bool> loadGame(int index) async {
+    final loadedState = await _saveLoadService.loadGame(index);
+    if (loadedState != null) {
+      _gameState = loadedState;
+      _gameService = GameService(_gameState);
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+  
+  /// Löscht ein gespeichertes Spiel
+  Future<bool> deleteGame(int index) async {
+    final result = await _saveLoadService.deleteGame(index);
+    if (result) {
+      notifyListeners(); // Benachrichtige Listener, falls die UI aktualisiert werden muss
+    }
+    return result;
+  }
+  
+  /// Gibt eine Liste aller gespeicherten Spielstände zurück
+  Future<List<Map<String, dynamic>>> getSavedGames() async {
+    return await _saveLoadService.getSavedGames();
   }
 }

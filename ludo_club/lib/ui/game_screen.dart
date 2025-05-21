@@ -15,6 +15,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   late AnimationController _diceAnimationController;
   late Animation<double> _diceAnimation;
   int _displayDiceValue = 1;
+  bool _winnerDialogShown = false;
 
   @override
   void initState() {
@@ -49,11 +50,28 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         title: const Text('Ludo Club'),
         backgroundColor: Colors.blue.shade700,
         elevation: 0,
+        actions: [
+          // Speichern-Button
+          IconButton(
+            icon: const Icon(Icons.save),
+            tooltip: 'Spiel speichern',
+            onPressed: _showSaveDialog,
+          ),
+        ],
       ),
       body: Consumer<GameProvider>(
         builder: (context, gameProvider, child) {
           final gameState = gameProvider.gameState;
           final possibleMoves = gameProvider.getPossibleMoves();
+          
+          // Prüfe, ob das Spiel vorbei ist und zeige den Gewinnbildschirm
+          if (gameState.isGameOver && !_winnerDialogShown) {
+            // Verzögerung für eine bessere Benutzererfahrung
+            Future.delayed(const Duration(milliseconds: 500), () {
+              _showWinnerDialog(gameState.winner!);
+            });
+            _winnerDialogShown = true;
+          }
           
           return Container(
             decoration: BoxDecoration(
@@ -579,6 +597,181 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   // Spielfigur bewegen
   Future<void> _moveToken(GameProvider gameProvider, int tokenIndex, int targetPosition) async {
     await gameProvider.moveToken(tokenIndex, targetPosition);
+  }
+
+  // Zeigt den Gewinnbildschirm als Dialog an
+  void _showWinnerDialog(Player winner) {
+    final playerColor = _getPlayerColor(winner.id);
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('🎉 Spielende 🎉', 
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 20),
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: playerColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 5,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Text(
+                    winner.name.substring(0, 1).toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 28,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                '${winner.name} hat gewonnen!',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Herzlichen Glückwunsch!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 30),
+            ],
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Dialog schließen
+                Navigator.of(context).pop(); // Zum Hauptmenü zurückkehren
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              ),
+              child: const Text('Zurück zum Hauptmenü'),
+            ),
+            const SizedBox(width: 10),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Dialog schließen
+                
+                // Neues Spiel mit den gleichen Spielern starten
+                final gameProvider = Provider.of<GameProvider>(context, listen: false);
+                gameProvider.startNewGame(
+                  gameProvider.gameState.players.map((p) => 
+                    Player(p.id, p.name, isAI: p.isAI)).toList()
+                );
+                
+                // Dialog-Flag zurücksetzen
+                setState(() {
+                  _winnerDialogShown = false;
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              ),
+              child: const Text('Neues Spiel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Zeigt einen Dialog zum Speichern des Spiels
+  void _showSaveDialog() {
+    final TextEditingController nameController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Spiel speichern'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Gib einen Namen für deinen Spielstand ein:',
+                style: TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Name des Spielstands',
+                  border: OutlineInputBorder(),
+                ),
+                autofocus: true,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Abbrechen'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final name = nameController.text.trim();
+                final customName = name.isNotEmpty ? name : null;
+                
+                Navigator.of(context).pop();
+                
+                final gameProvider = Provider.of<GameProvider>(context, listen: false);
+                final success = await gameProvider.saveGame(customName: customName);
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      success 
+                        ? 'Spiel erfolgreich gespeichert!' 
+                        : 'Fehler beim Speichern des Spiels.',
+                    ),
+                    backgroundColor: success ? Colors.green : Colors.red,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+              ),
+              child: const Text('Speichern'),
+            ),
+          ],
+        );
+      },
+    ).then((_) {
+      // Controller freigeben, wenn der Dialog geschlossen wird
+      nameController.dispose();
+    });
   }
 }
 
