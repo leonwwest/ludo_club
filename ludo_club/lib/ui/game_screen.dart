@@ -51,6 +51,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         backgroundColor: Colors.blue.shade700,
         elevation: 0,
         actions: [
+          // Sound-Einstellungen-Button
+          IconButton(
+            icon: const Icon(Icons.volume_up),
+            tooltip: 'Sound-Einstellungen',
+            onPressed: _showSoundSettingsDialog,
+          ),
           // Speichern-Button
           IconButton(
             icon: const Icon(Icons.save),
@@ -772,6 +778,74 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       // Controller freigeben, wenn der Dialog geschlossen wird
       nameController.dispose();
     });
+  }
+
+  // Zeigt den Dialog für Sound-Einstellungen
+  void _showSoundSettingsDialog() {
+    final gameProvider = Provider.of<GameProvider>(context, listen: false);
+    bool soundEnabled = gameProvider.isSoundEnabled;
+    double volume = gameProvider.volume;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Sound-Einstellungen'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Sound an/aus
+                  SwitchListTile(
+                    title: const Text('Sound'),
+                    value: soundEnabled,
+                    onChanged: (value) {
+                      setState(() {
+                        soundEnabled = value;
+                      });
+                      gameProvider.setSoundEnabled(value);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  // Lautstärke einstellen
+                  Row(
+                    children: [
+                      const Icon(Icons.volume_down),
+                      Expanded(
+                        child: Slider(
+                          value: volume,
+                          min: 0.0,
+                          max: 1.0,
+                          divisions: 10,
+                          onChanged: soundEnabled
+                              ? (value) {
+                                  setState(() {
+                                    volume = value;
+                                  });
+                                  gameProvider.setVolume(value);
+                                }
+                              : null,
+                        ),
+                      ),
+                      const Icon(Icons.volume_up),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Schließen'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }
 
