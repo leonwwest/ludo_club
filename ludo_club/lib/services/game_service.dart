@@ -9,6 +9,7 @@ class GameService {
 
   /// Würfelt und steuert die Turn-Logik (max. 3 Würfe bei 6).
   int rollDice() {
+    // Bei mehr als 3 Würfen wechselt der Spieler
     if (state.currentRollCount >= 3) {
       _endTurn();
       return 0;
@@ -18,8 +19,15 @@ class GameService {
     state.lastDiceValue = value;
     state.currentRollCount++;
 
+    // Nur zum nächsten Spieler wechseln wenn:
+    // 1. Keine 6 gewürfelt wurde ODER
+    // 2. Wir bereits zum dritten Mal gewürfelt haben
     if (value != 6 || state.currentRollCount >= 3) {
-      _endTurn();
+      // Prüfe zuerst, ob der Spieler mit diesem Würfelwert überhaupt ziehen kann
+      final possibleMoves = getPossibleMoveDetails();
+      if (possibleMoves.isEmpty) {
+        _endTurn();
+      }
     }
     
     return value;
@@ -33,57 +41,178 @@ class GameService {
     state.currentTurnPlayerId = state.players[next].id;
   }
 
-  /// Bewegt eine Figur, wendet Safe- und Schlag-Logik an.
-  bool moveToken(String playerId, int targetIndex) {
-    // Prüfen, ob der Zug gültig ist
-    if (!isValidMove(playerId, targetIndex)) {
-      return false;
-    }
+  /// Gibt mögliche Züge mit Token-Index und Zielposition zurück
+  List<Map<String, int>> getPossibleMoveDetails() {
+    final List<Map<String, int>> moves = [];
+    final Player currentPlayer = state.currentPlayer;
+    final int? diceValue = state.lastDiceValue;
     
-    if (state.isSafeField(targetIndex, playerId)) {
-      _setPosition(playerId, targetIndex);
-      return true;
-    }
-    
-    // Gegner schlagen
-    for (var opp in state.players.where((p) =>
-        p.position == targetIndex && p.id != playerId)) {
-      opp.position = state.startIndex[opp.id]!;
-    }
-    
-    _setPosition(playerId, targetIndex);
-    return true;
-  }
-
-  void _setPosition(String playerId, int pos) {
-    state.players.firstWhere((p) => p.id == playerId).position = pos;
-  }
-  
-  /// Prüft, ob ein Zug gültig ist
-  bool isValidMove(String playerId, int targetIndex) {
-    final player = state.players.firstWhere((p) => p.id == playerId);
-    final diceValue = state.lastDiceValue;
-    
-    // Kein Würfelwert vorhanden
     if (diceValue == null) {
-      return false;
-    }
-    
-    // Prüfen, ob der Zug der Würfelzahl entspricht
-    final expectedTarget = (player.position + diceValue) % GameState.totalFields;
-    return targetIndex == expectedTarget;
-  }
-  
-  /// Berechnet mögliche Züge für den aktuellen Spieler
-  List<int> getPossibleMoves() {
-    if (state.lastDiceValue == null) {
       return [];
     }
     
-    final player = state.players.firstWhere((p) => p.id == state.currentTurnPlayerId);
-    final targetPos = (player.position + state.lastDiceValue!) % GameState.totalFields;
+    for (int tokenIndex = 0; tokenIndex < currentPlayer.tokenPositions.length; tokenIndex++) {
+      final int currentPos = currentPlayer.tokenPositions[tokenIndex];
+      
+      // Wenn Figur in der Basis ist, benötigen wir eine 6, um sie herauszubewegen
+      if (currentPos == GameState.basePosition) {
+        if (diceValue == 6) {
+          moves.add({
+            'tokenIndex': tokenIndex,
+            'targetPosition': state.startIndex[currentPlayer.id]!,
+          });
+        }
+        continue;
+      }
+      
+      // Figur ist im Ziel - kann nicht bewegt werden
+      if (currentPos == GameState.finishedPosition) {
+        continue;
+      }
+      
+      // Berechne Zielposition
+      int targetPos;
+      
+      // Figur ist auf dem Hauptspielfeld
+      if (currentPos < GameState.totalFields) {
+        // Berechne nächste Position auf dem Hauptspielfeld
+        int nextPos = (currentPos + diceValue) % GameState.totalFields;
+        
+        // Prüfe, ob Figur in den Heimweg einbiegen soll
+        int playerStartField = state.startIndex[currentPlayer.id]!;
+        int distanceFromStart = (currentPos - playerStartField + GameState.totalFields) % GameState.totalFields;
+        int distanceAfterMove = (distanceFromStart + diceValue) % GameState.totalFields;
+        
+        // Wenn die Figur eine volle Runde gedreht hat und am eigenen Startfeld vorbeikommt
+        if (distanceFromStart < GameState.totalFields - diceValue && distanceAfterMove >= GameState.totalFields - diceValue) {
+          // Figur biegt in den Heimweg ein
+          int homePathPosition = GameState.totalFields + (diceValue - (GameState.totalFields - distanceFromStart) - 1);
+          if (homePathPosition < GameState.totalFields + GameState.homePathLength) {
+            nextPos = homePathPosition;
+          }
+        }
+        
+        targetPos = nextPos;
+      } 
+      // Figur ist auf dem Heimweg
+      else if (currentPos < GameState.totalFields + GameState.homePathLength) {
+        // Berechne nächste Position auf dem Heimweg
+        int homePos = currentPos + diceValue;
+        
+        // Prüfe, ob die Figur das Ziel erreicht
+        if (homePos == GameState.totalFields + GameState.homePathLength - 1 + diceValue) {
+          targetPos = GameState.finishedPosition;
+        } 
+        // Prüfe, ob die Figur über das Ziel hinausschießt (ungültiger Zug)
+        else if (homePos >= GameState.totalFields + GameState.homePathLength) {
+          continue;
+        } 
+        else {
+          targetPos = homePos;
+        }
+      }
+      else {
+        // Sollte nicht vorkommen, aber zur Sicherheit
+        continue;
+      }
+      
+      // Prüfe, ob Zielposition von eigener Figur besetzt ist
+      bool isSelfBlocked = currentPlayer.tokenPositions.any((pos) => 
+        pos != currentPos && pos == targetPos && pos != GameState.finishedPosition);
+      
+      if (!isSelfBlocked) {
+        moves.add({
+          'tokenIndex': tokenIndex,
+          'targetPosition': targetPos,
+        });
+      }
+    }
     
-    return [targetPos];
+    return moves;
+  }
+
+  /// Vereinfachte Methode, die nur die Zielpositionen zurückgibt
+  List<int> getPossibleMoves() {
+    return getPossibleMoveDetails().map((move) => move['targetPosition']!).toList();
+  }
+
+  /// Bewegt eine Figur, wendet Safe- und Schlag-Logik an.
+  bool moveToken(String playerId, int tokenIndex, int targetPosition) {
+    if (playerId != state.currentTurnPlayerId) return false;
+    
+    final player = state.players.firstWhere((p) => p.id == playerId);
+    
+    // Prüfen, ob der Zug gültig ist
+    if (!isValidMove(playerId, tokenIndex, targetPosition)) {
+      return false;
+    }
+    
+    // Aktuelle Position der Figur
+    final currentPosition = player.tokenPositions[tokenIndex];
+    
+    // Wenn Figur auf das Hauptspielfeld kommt
+    if (currentPosition == GameState.basePosition && targetPosition == state.startIndex[playerId]) {
+      _setTokenPosition(playerId, tokenIndex, targetPosition);
+      
+      // Wenn eine 6 gewürfelt wurde und eine Figur aus der Basis geholt wird,
+      // darf der Spieler nochmal würfeln, daher keinen Spielerwechsel
+      // ist bereits in rollDice() berücksichtigt
+      return true;
+    }
+    
+    // Wenn die Figur ins Ziel kommt
+    if (targetPosition == GameState.finishedPosition) {
+      _setTokenPosition(playerId, tokenIndex, targetPosition);
+      
+      // Prüfe, ob der Spieler gewonnen hat (alle Figuren im Ziel)
+      bool hasWon = player.tokenPositions.every((pos) => pos == GameState.finishedPosition);
+      if (hasWon) {
+        // Spielgewinn-Logik hier implementieren
+        // z.B. state.winner = player.id;
+      }
+      
+      // Nach einem Zug ins Ziel darf der Spieler nochmal würfeln (Bonus-Regel)
+      // Alternativ: _endTurn(); // Falls diese Regel nicht gewünscht ist
+      return true;
+    }
+    
+    // Wenn targetPosition auf dem Hauptspielfeld ist, prüfe auf gegnerische Figuren
+    if (targetPosition < GameState.totalFields) {
+      if (!state.isSafeField(targetPosition, playerId)) {
+        // Suche nach gegnerischen Figuren auf der Zielposition
+        for (var opponent in state.players.where((p) => p.id != playerId)) {
+          for (int i = 0; i < opponent.tokenPositions.length; i++) {
+            if (opponent.tokenPositions[i] == targetPosition) {
+              // Gegnerische Figur zurück zur Basis schicken
+              _setTokenPosition(opponent.id, i, GameState.basePosition);
+            }
+          }
+        }
+      }
+    }
+    
+    // Figur bewegen
+    _setTokenPosition(playerId, tokenIndex, targetPosition);
+    
+    // Falls keine 6 gewürfelt wurde, ist der nächste Spieler dran
+    // Oder falls es der dritte Wurf war
+    // Diese Logik ist bereits in rollDice() implementiert
+    
+    return true;
+  }
+
+  void _setTokenPosition(String playerId, int tokenIndex, int pos) {
+    state.players.firstWhere((p) => p.id == playerId).tokenPositions[tokenIndex] = pos;
+  }
+  
+  /// Prüft, ob ein Zug gültig ist
+  bool isValidMove(String playerId, int tokenIndex, int targetPosition) {
+    final moves = getPossibleMoveDetails();
+    
+    // Suche nach einem Zug für den angegebenen tokenIndex mit der entsprechenden Zielposition
+    return moves.any((move) => 
+        move['tokenIndex'] == tokenIndex && 
+        move['targetPosition'] == targetPosition);
   }
   
   /// KI-Logik für automatische Züge
@@ -93,7 +222,7 @@ class GameService {
     }
     
     // Würfeln
-    rollDice();
+    final diceValue = rollDice();
     
     // Wenn kein Würfelwert mehr vorhanden ist (z.B. nach _endTurn), beenden
     if (state.lastDiceValue == null) {
@@ -101,12 +230,60 @@ class GameService {
     }
     
     // Mögliche Züge ermitteln
-    final moves = getPossibleMoves();
+    final moves = getPossibleMoveDetails();
     if (moves.isEmpty) {
+      _endTurn();
       return;
     }
     
-    // Einfache KI-Strategie: Ersten möglichen Zug ausführen
-    moveToken(state.currentTurnPlayerId, moves.first);
+    // Einfache KI-Strategie: Priorität der Züge
+    // 1. Figur ins Ziel bringen
+    // 2. Gegnerische Figur schlagen
+    // 3. Figur aus der Basis herausbringen
+    // 4. Figur auf dem Hauptspielfeld vorwärts bewegen
+    
+    // Suche einen Zug, der eine Figur ins Ziel bringt
+    for (var move in moves) {
+      if (move['targetPosition'] == GameState.finishedPosition) {
+        moveToken(state.currentTurnPlayerId, move['tokenIndex']!, move['targetPosition']!);
+        return;
+      }
+    }
+    
+    // Suche einen Zug, der eine gegnerische Figur schlägt
+    for (var move in moves) {
+      final targetPos = move['targetPosition']!;
+      if (targetPos < GameState.totalFields && !state.isSafeField(targetPos, state.currentTurnPlayerId)) {
+        bool canHitOpponent = false;
+        
+        for (var opponent in state.players.where((p) => p.id != state.currentTurnPlayerId)) {
+          if (opponent.tokenPositions.any((pos) => pos == targetPos)) {
+            canHitOpponent = true;
+            break;
+          }
+        }
+        
+        if (canHitOpponent) {
+          moveToken(state.currentTurnPlayerId, move['tokenIndex']!, move['targetPosition']!);
+          return;
+        }
+      }
+    }
+    
+    // Suche einen Zug, der eine Figur aus der Basis herausbringt
+    for (var move in moves) {
+      final player = state.currentPlayer;
+      final tokenIndex = move['tokenIndex']!;
+      
+      if (player.tokenPositions[tokenIndex] == GameState.basePosition) {
+        moveToken(state.currentTurnPlayerId, move['tokenIndex']!, move['targetPosition']!);
+        return;
+      }
+    }
+    
+    // Fallback: Ersten möglichen Zug ausführen
+    if (moves.isNotEmpty) {
+      moveToken(state.currentTurnPlayerId, moves[0]['tokenIndex']!, moves[0]['targetPosition']!);
+    }
   }
 }

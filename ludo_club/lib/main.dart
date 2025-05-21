@@ -17,10 +17,10 @@ class MyApp extends StatelessWidget {
       create: (context) => GameProvider(
         GameState(
           startIndex: {
-            'player1': 0,
-            'player2': 13,
-            'player3': 26,
-            'player4': 39,
+            'player1': 0,   // Rot (oben)
+            'player2': 10,  // Blau (rechts)
+            'player3': 20,  // Grün (unten)
+            'player4': 30,  // Gelb (links)
           },
           players: [
             Player('player1', 'Spieler 1'),

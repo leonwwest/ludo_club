@@ -37,7 +37,7 @@ class GameProvider extends ChangeNotifier {
   }
   
   /// Bewegt eine Spielfigur
-  Future<bool> moveToken(int targetIndex) async {
+  Future<bool> moveToken(int tokenIndex, int targetPosition) async {
     if (_isAnimating) return false;
     
     _isAnimating = true;
@@ -46,7 +46,7 @@ class GameProvider extends ChangeNotifier {
     // Bewegungsanimation simulieren
     await Future.delayed(const Duration(milliseconds: 500));
     
-    final result = _gameService.moveToken(_gameState.currentTurnPlayerId, targetIndex);
+    final result = _gameService.moveToken(_gameState.currentTurnPlayerId, tokenIndex, targetPosition);
     _isAnimating = false;
     notifyListeners();
     
@@ -56,6 +56,11 @@ class GameProvider extends ChangeNotifier {
   /// Gibt mögliche Züge für den aktuellen Spieler zurück
   List<int> getPossibleMoves() {
     return _gameService.getPossibleMoves();
+  }
+  
+  /// Gibt detaillierte Informationen zu möglichen Zügen zurück (tokenIndex und targetPosition)
+  List<Map<String, int>> getPossibleMoveDetails() {
+    return _gameService.getPossibleMoveDetails();
   }
   
   /// Startet ein neues Spiel mit den angegebenen Spielern

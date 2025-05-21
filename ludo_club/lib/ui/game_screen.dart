@@ -245,11 +245,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildGameBoard(GameState gameState, List<int> possibleMoves, GameProvider gameProvider) {
-    // Einfaches Spielbrett mit 52 Feldern
+    // Einfaches Spielbrett mit 40 Feldern im Kreis + Heimatfelder + Zielfelder
     return LayoutBuilder(
       builder: (context, constraints) {
         final boardSize = constraints.maxWidth;
         final fieldSize = boardSize / 13; // 13x13 Raster für das Spielbrett
+        
+        // Hole die detaillierten Zugmöglichkeiten (Token-Index + Zielposition)
+        final moveDetails = gameProvider.getPossibleMoveDetails();
         
         return Stack(
           children: [
@@ -259,27 +262,28 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               painter: GameBoardPainter(),
             ),
             
-            // Spielfelder
-            ...List.generate(GameState.totalFields, (index) {
-              final position = _calculateFieldPosition(index, boardSize);
-              final isHighlighted = possibleMoves.contains(index);
+            // Spielfelder und Zielpositionen hervorheben
+            ...moveDetails.map((move) {
+              final targetPos = move['targetPosition']!;
+              if (targetPos == GameState.finishedPosition) {
+                // Zielposition besonders markieren
+                return Container(); // Platzhalter, kann später angepasst werden
+              }
+              
+              final position = _calculateFieldPosition(targetPos, boardSize);
               
               return Positioned(
                 left: position.dx - fieldSize / 2,
                 top: position.dy - fieldSize / 2,
                 child: GestureDetector(
-                  onTap: isHighlighted
-                      ? () => _moveToken(gameProvider, index)
-                      : null,
+                  onTap: () => _moveToken(gameProvider, move['tokenIndex']!, targetPos),
                   child: Container(
                     width: fieldSize,
                     height: fieldSize,
                     decoration: BoxDecoration(
-                      color: isHighlighted
-                          ? Colors.yellow.withOpacity(0.5)
-                          : Colors.transparent,
+                      color: Colors.yellow.withOpacity(0.5),
                       border: Border.all(
-                        color: isHighlighted ? Colors.orange : Colors.transparent,
+                        color: Colors.orange,
                         width: 2,
                       ),
                       shape: BoxShape.circle,
@@ -287,50 +291,43 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   ),
                 ),
               );
-            }),
+            }).toList(),
             
             // Spielfiguren
-            ...gameState.players.map((player) {
-              final position = _calculateFieldPosition(player.position, boardSize);
-              final playerColor = _getPlayerColor(player.id);
-              
-              return Positioned(
-                left: position.dx - fieldSize / 2,
-                top: position.dy - fieldSize / 2,
-                child: Container(
-                  width: fieldSize,
-                  height: fieldSize,
-                  decoration: BoxDecoration(
-                    color: playerColor,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.white,
-                      width: 2,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
-                        blurRadius: 3,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Text(
-                      player.name.substring(0, 1),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              );
+            ...gameState.players.expand((player) {
+              return player.tokenPositions.asMap().entries.map((entry) {
+                final tokenIndex = entry.key;
+                final position = entry.value;
+                
+                // Figur ist in der Basis
+                if (position == GameState.basePosition) {
+                  // Berechne Position in der Basis des Spielers
+                  final basePosition = _calculateBasePosition(player.id, tokenIndex, boardSize);
+                  return _buildToken(player, tokenIndex, basePosition, fieldSize);
+                }
+                
+                // Figur ist im Ziel
+                if (position == GameState.finishedPosition) {
+                  // Berechne Position im Zielbereich
+                  final finishPosition = _calculateFinishPosition(player.id, tokenIndex, boardSize);
+                  return _buildToken(player, tokenIndex, finishPosition, fieldSize);
+                }
+                
+                // Figur ist auf dem Heimweg
+                if (position >= GameState.totalFields) {
+                  final homePosition = _calculateHomePathPosition(player.id, position - GameState.totalFields, boardSize);
+                  return _buildToken(player, tokenIndex, homePosition, fieldSize);
+                }
+                
+                // Figur ist auf dem Hauptspielfeld
+                final boardPosition = _calculateFieldPosition(position, boardSize);
+                return _buildToken(player, tokenIndex, boardPosition, fieldSize);
+              });
             }).toList(),
             
             // Safe Zones markieren
             ...gameState.players.map((player) {
-              final safeIndex = (gameState.startIndex[player.id]! + 4) % GameState.totalFields;
+              final safeIndex = gameState.startIndex[player.id]!;
               final position = _calculateFieldPosition(safeIndex, boardSize);
               final playerColor = _getPlayerColor(player.id);
               
@@ -356,6 +353,161 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         );
       },
     );
+  }
+
+  // Baut eine einzelne Spielfigur
+  Widget _buildToken(Player player, int tokenIndex, Offset position, double fieldSize) {
+    final playerColor = _getPlayerColor(player.id);
+    final canBeMoved = Provider.of<GameProvider>(context, listen: false)
+        .getPossibleMoveDetails()
+        .any((move) => move['tokenIndex'] == tokenIndex);
+    
+    return Positioned(
+      left: position.dx - fieldSize / 2,
+      top: position.dy - fieldSize / 2,
+      child: GestureDetector(
+        onTap: canBeMoved ? () => _showMoveOptions(player.id, tokenIndex) : null,
+        child: Container(
+          width: fieldSize,
+          height: fieldSize,
+          decoration: BoxDecoration(
+            color: playerColor,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: Colors.white,
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 3,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Text(
+              (tokenIndex + 1).toString(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Zeigt Popup mit möglichen Zügen für diese Figur
+  void _showMoveOptions(String playerId, int tokenIndex) {
+    if (playerId != Provider.of<GameProvider>(context, listen: false).gameState.currentTurnPlayerId) {
+      return;
+    }
+    
+    final moveDetails = Provider.of<GameProvider>(context, listen: false)
+        .getPossibleMoveDetails()
+        .where((move) => move['tokenIndex'] == tokenIndex)
+        .toList();
+        
+    if (moveDetails.isEmpty) return;
+    
+    // Wenn nur ein möglicher Zug, direkt ausführen
+    if (moveDetails.length == 1) {
+      _moveToken(Provider.of<GameProvider>(context, listen: false), 
+        tokenIndex, moveDetails[0]['targetPosition']!);
+      return;
+    }
+    
+    // Hier könnte ein Dialog angezeigt werden, falls mehrere Ziele möglich sind
+    // Aktuell nicht nötig, da immer nur ein Ziel pro Figur möglich ist
+  }
+
+  // Berechnet die Position in der Basis eines Spielers
+  Offset _calculateBasePosition(String playerId, int tokenIndex, double boardSize) {
+    final fieldSize = boardSize / 13;
+    final basePositions = {
+      'player1': [
+        Offset(2 * fieldSize, 2 * fieldSize),
+        Offset(4 * fieldSize, 2 * fieldSize),
+        Offset(2 * fieldSize, 4 * fieldSize),
+        Offset(4 * fieldSize, 4 * fieldSize),
+      ],
+      'player2': [
+        Offset(9 * fieldSize, 2 * fieldSize),
+        Offset(11 * fieldSize, 2 * fieldSize),
+        Offset(9 * fieldSize, 4 * fieldSize),
+        Offset(11 * fieldSize, 4 * fieldSize),
+      ],
+      'player3': [
+        Offset(9 * fieldSize, 9 * fieldSize),
+        Offset(11 * fieldSize, 9 * fieldSize),
+        Offset(9 * fieldSize, 11 * fieldSize),
+        Offset(11 * fieldSize, 11 * fieldSize),
+      ],
+      'player4': [
+        Offset(2 * fieldSize, 9 * fieldSize),
+        Offset(4 * fieldSize, 9 * fieldSize),
+        Offset(2 * fieldSize, 11 * fieldSize),
+        Offset(4 * fieldSize, 11 * fieldSize),
+      ],
+    };
+    
+    return basePositions[playerId]![tokenIndex];
+  }
+  
+  // Berechnet die Position im Zielbereich
+  Offset _calculateFinishPosition(String playerId, int tokenIndex, double boardSize) {
+    final fieldSize = boardSize / 13;
+    final finishPositions = {
+      'player1': Offset(6 * fieldSize, 6 * fieldSize),
+      'player2': Offset(7 * fieldSize, 6 * fieldSize),
+      'player3': Offset(7 * fieldSize, 7 * fieldSize),
+      'player4': Offset(6 * fieldSize, 7 * fieldSize),
+    };
+    
+    // Im Zielfeld werden die Tokens gestapelt
+    return finishPositions[playerId]!;
+  }
+  
+  // Berechnet die Position auf dem Heimweg (Zielgerade)
+  Offset _calculateHomePathPosition(String playerId, int homePathIndex, double boardSize) {
+    final fieldSize = boardSize / 13;
+    
+    // Pfadkoordinaten für jeden Spieler
+    final homePaths = {
+      'player1': [
+        Offset(6 * fieldSize, 5 * fieldSize),
+        Offset(6 * fieldSize, 4 * fieldSize),
+        Offset(6 * fieldSize, 3 * fieldSize),
+        Offset(6 * fieldSize, 2 * fieldSize),
+      ],
+      'player2': [
+        Offset(7 * fieldSize, 6 * fieldSize),
+        Offset(8 * fieldSize, 6 * fieldSize),
+        Offset(9 * fieldSize, 6 * fieldSize),
+        Offset(10 * fieldSize, 6 * fieldSize),
+      ],
+      'player3': [
+        Offset(6 * fieldSize, 7 * fieldSize),
+        Offset(6 * fieldSize, 8 * fieldSize),
+        Offset(6 * fieldSize, 9 * fieldSize),
+        Offset(6 * fieldSize, 10 * fieldSize),
+      ],
+      'player4': [
+        Offset(5 * fieldSize, 6 * fieldSize),
+        Offset(4 * fieldSize, 6 * fieldSize),
+        Offset(3 * fieldSize, 6 * fieldSize),
+        Offset(2 * fieldSize, 6 * fieldSize),
+      ],
+    };
+    
+    if (homePathIndex >= 0 && homePathIndex < homePaths[playerId]!.length) {
+      return homePaths[playerId]![homePathIndex];
+    }
+    
+    // Fallback
+    return Offset(6 * fieldSize, 6 * fieldSize);
   }
 
   // Berechnet die Position eines Feldes auf dem Spielbrett
@@ -425,8 +577,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   // Spielfigur bewegen
-  Future<void> _moveToken(GameProvider gameProvider, int targetIndex) async {
-    await gameProvider.moveToken(targetIndex);
+  Future<void> _moveToken(GameProvider gameProvider, int tokenIndex, int targetPosition) async {
+    await gameProvider.moveToken(tokenIndex, targetPosition);
   }
 }
 
