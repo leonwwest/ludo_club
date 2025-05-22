@@ -269,10 +269,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildGameBoard(GameState gameState, List<int> possibleMoves, GameProvider gameProvider) {
-<<<<<<< HEAD
-=======
     // Einfaches Spielbrett mit 40 Feldern im Kreis + Heimatfelder + Zielfelder
->>>>>>> ea7bbac21da49f2d140669fcb86aadd27e68f98e
     return LayoutBuilder(
       builder: (context, constraints) {
         final boardSize = constraints.maxWidth;
@@ -320,77 +317,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               );
             }).toList(),
             
-<<<<<<< HEAD
-            // Figuren im Heimatfeld für jeden Spieler
-            ...gameState.players.expand((player) {
-              List<Widget> pieces = [];
-              for (int i = 0; i < player.homePositions.length; i++) {
-                if (player.homePositions[i] == -1) {
-                  pieces.add(_buildHomePiece(player, i, boardSize, fieldSize, gameProvider, possibleMoves, gameState));
-                }
-              }
-              return pieces;
-            }).toList(),
-            
-            // Spielfiguren auf dem Spielfeld
-            ...gameState.players.where((player) => player.position >= 0).map((player) {
-              final position = _calculateFieldPosition(player.position, boardSize);
-              final playerColor = _getPlayerColor(player.id);
-              
-              return Positioned(
-                left: position.dx - fieldSize / 2,
-                top: position.dy - fieldSize / 2,
-                child: TweenAnimationBuilder<Offset>(
-                  duration: const Duration(milliseconds: 500),
-                  curve: Curves.easeInOut,
-                  tween: Tween<Offset>(
-                    begin: Offset(position.dx - fieldSize / 2, position.dy - fieldSize / 2),
-                    end: Offset(position.dx - fieldSize / 2, position.dy - fieldSize / 2),
-                  ),
-                  builder: (context, offset, child) {
-                    return child!;
-                  },
-                  child: Container(
-                    width: fieldSize,
-                    height: fieldSize,
-                    child: CustomPaint(
-                      painter: PiecePainter(color: playerColor),
-                      child: Center(
-                        child: Text(
-                          player.name.substring(0, 1),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-            
-            // Safe Zones markieren
-            ...gameState.players.expand<Widget>((player) {
-              final safeIndices = [1, 6, 11, 16]; // Die Sternfelder
-              return safeIndices.map((safeIndex) {
-                final position = _calculateFieldPosition(safeIndex, boardSize);
-                return Positioned(
-                  left: position.dx - fieldSize / 2,
-                  top: position.dy - fieldSize / 2,
-                  child: Container(
-                    width: fieldSize,
-                    height: fieldSize,
-                    decoration: BoxDecoration(
-                      color: Colors.transparent,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.grey.shade600,
-                        width: 2,
-                        style: BorderStyle.solid,
-                      ),
-=======
             // Spielfiguren
             ...gameState.players.expand((player) {
               return player.tokenPositions.asMap().entries.map((entry) {
@@ -442,11 +368,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       color: playerColor,
                       width: 3,
                       style: BorderStyle.solid,
->>>>>>> ea7bbac21da49f2d140669fcb86aadd27e68f98e
                     ),
                   ),
-                );
-              }).toList();
+                ),
+              );
             }).toList(),
           ],
         );
@@ -467,7 +392,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       left: pos.dx - fieldSize / 2,
       top: pos.dy - fieldSize / 2,
       child: GestureDetector(
-        onTap: isHighlighted ? () => _moveToken(gameProvider, gameState.startIndex[player.id]!) : null,
+        onTap: isHighlighted ? () => _moveToken(gameProvider, pieceIndex, gameState.startIndex[player.id]!) : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           width: fieldSize,
@@ -583,7 +508,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     // Wenn nur ein möglicher Zug, direkt ausführen
     if (moveDetails.length == 1) {
       _moveToken(Provider.of<GameProvider>(context, listen: false), 
-        tokenIndex, moveDetails[0]['targetPosition']!);
+                tokenIndex, moveDetails[0]['targetPosition']!);
       return;
     }
     
