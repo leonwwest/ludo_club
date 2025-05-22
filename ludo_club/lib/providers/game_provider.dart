@@ -146,8 +146,7 @@ class GameProvider extends ChangeNotifier {
     
     // Setze die Startpositionen der Spieler auf ihre Heimatfelder
     for (var player in players) {
-      player.position = -1; // -1 bedeutet, dass die Figur im Heimatfeld ist
-      player.homePositions = [-1, -1, -1, -1]; // Alle 4 Figuren im Heimatfeld
+      player.tokenPositions = List.filled(GameState.tokensPerPlayer, GameState.basePosition);
     }
     
     _gameState = GameState(
