@@ -138,17 +138,11 @@ class GameProvider extends ChangeNotifier {
   /// Startet ein neues Spiel mit den angegebenen Spielern
   void startNewGame(List<Player> players) {
     final startIndices = <String, int>{
-      'player1': 0,    // Gelb (oben)
-      'player2': 5,    // Blau (rechts)
-      'player3': 10,   // Grün (unten)
-      'player4': 15,   // Rot (links)
+      'player1': 0,   // Gelb (oben)
+      'player2': 10,  // Blau (rechts)
+      'player3': 20,  // Grün (unten)
+      'player4': 30,  // Rot (links)
     };
-    
-    // Setze die Startpositionen der Spieler auf ihre Heimatfelder
-    for (var player in players) {
-      player.position = -1; // -1 bedeutet, dass die Figur im Heimatfeld ist
-      player.homePositions = [-1, -1, -1, -1]; // Alle 4 Figuren im Heimatfeld
-    }
     
     _gameState = GameState(
       startIndex: startIndices,

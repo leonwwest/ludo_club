@@ -17,16 +17,16 @@ class MyApp extends StatelessWidget {
       create: (context) => GameProvider(
         GameState(
           startIndex: {
-            'player1': 0,    // Grün (links)
-            'player2': 13,   // Gelb (oben)
-            'player3': 26,   // Rot (rechts)
-            'player4': 39,   // Blau (unten)
+            'player1': 0,   // Gelb (oben)
+            'player2': 10,  // Blau (rechts) 
+            'player3': 20,  // Grün (unten)
+            'player4': 30,  // Rot (links)
           },
           players: [
-            Player('player1', 'Grün'),
-            Player('player2', 'Gelb', isAI: true),
-            Player('player3', 'Rot', isAI: true),
-            Player('player4', 'Blau', isAI: true),
+            Player('player1', 'Gelb'),
+            Player('player2', 'Blau', isAI: true),
+            Player('player3', 'Grün', isAI: true),
+            Player('player4', 'Rot', isAI: true),
           ],
           currentTurnPlayerId: 'player1',
         ),
