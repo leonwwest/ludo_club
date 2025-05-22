@@ -15,6 +15,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   late AnimationController _diceAnimationController;
   late Animation<double> _diceAnimation;
   int _displayDiceValue = 1;
+  bool _winnerDialogShown = false;
 
   @override
   void initState() {
@@ -49,11 +50,34 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         title: const Text('Ludo Club'),
         backgroundColor: Colors.blue.shade700,
         elevation: 0,
+        actions: [
+          // Sound-Einstellungen-Button
+          IconButton(
+            icon: const Icon(Icons.volume_up),
+            tooltip: 'Sound-Einstellungen',
+            onPressed: _showSoundSettingsDialog,
+          ),
+          // Speichern-Button
+          IconButton(
+            icon: const Icon(Icons.save),
+            tooltip: 'Spiel speichern',
+            onPressed: _showSaveDialog,
+          ),
+        ],
       ),
       body: Consumer<GameProvider>(
         builder: (context, gameProvider, child) {
           final gameState = gameProvider.gameState;
           final possibleMoves = gameProvider.getPossibleMoves();
+          
+          // Prüfe, ob das Spiel vorbei ist und zeige den Gewinnbildschirm
+          if (gameState.isGameOver && !_winnerDialogShown) {
+            // Verzögerung für eine bessere Benutzererfahrung
+            Future.delayed(const Duration(milliseconds: 500), () {
+              _showWinnerDialog(gameState.winner!);
+            });
+            _winnerDialogShown = true;
+          }
           
           return Container(
             decoration: BoxDecoration(
@@ -245,10 +269,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildGameBoard(GameState gameState, List<int> possibleMoves, GameProvider gameProvider) {
+<<<<<<< HEAD
+=======
+    // Einfaches Spielbrett mit 40 Feldern im Kreis + Heimatfelder + Zielfelder
+>>>>>>> ea7bbac21da49f2d140669fcb86aadd27e68f98e
     return LayoutBuilder(
       builder: (context, constraints) {
         final boardSize = constraints.maxWidth;
         final fieldSize = boardSize / 15;
+        
+        // Hole die detaillierten Zugmöglichkeiten (Token-Index + Zielposition)
+        final moveDetails = gameProvider.getPossibleMoveDetails();
         
         return Stack(
           children: [
@@ -258,27 +289,28 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               painter: GameBoardPainter(),
             ),
             
-            // Spielfelder
-            ...List.generate(GameState.totalFields, (index) {
-              final position = _calculateFieldPosition(index, boardSize);
-              final isHighlighted = possibleMoves.contains(index);
+            // Spielfelder und Zielpositionen hervorheben
+            ...moveDetails.map((move) {
+              final targetPos = move['targetPosition']!;
+              if (targetPos == GameState.finishedPosition) {
+                // Zielposition besonders markieren
+                return Container(); // Platzhalter, kann später angepasst werden
+              }
+              
+              final position = _calculateFieldPosition(targetPos, boardSize);
               
               return Positioned(
                 left: position.dx - fieldSize / 2,
                 top: position.dy - fieldSize / 2,
                 child: GestureDetector(
-                  onTap: isHighlighted
-                      ? () => _moveToken(gameProvider, index)
-                      : null,
+                  onTap: () => _moveToken(gameProvider, move['tokenIndex']!, targetPos),
                   child: Container(
                     width: fieldSize,
                     height: fieldSize,
                     decoration: BoxDecoration(
-                      color: isHighlighted
-                          ? Colors.yellow.withOpacity(0.5)
-                          : Colors.transparent,
+                      color: Colors.yellow.withOpacity(0.5),
                       border: Border.all(
-                        color: isHighlighted ? Colors.orange : Colors.transparent,
+                        color: Colors.orange,
                         width: 2,
                       ),
                       shape: BoxShape.circle,
@@ -286,8 +318,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   ),
                 ),
               );
-            }),
+            }).toList(),
             
+<<<<<<< HEAD
             // Figuren im Heimatfeld für jeden Spieler
             ...gameState.players.expand((player) {
               List<Widget> pieces = [];
@@ -357,6 +390,59 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                         width: 2,
                         style: BorderStyle.solid,
                       ),
+=======
+            // Spielfiguren
+            ...gameState.players.expand((player) {
+              return player.tokenPositions.asMap().entries.map((entry) {
+                final tokenIndex = entry.key;
+                final position = entry.value;
+                
+                // Figur ist in der Basis
+                if (position == GameState.basePosition) {
+                  // Berechne Position in der Basis des Spielers
+                  final basePosition = _calculateBasePosition(player.id, tokenIndex, boardSize);
+                  return _buildToken(player, tokenIndex, basePosition, fieldSize);
+                }
+                
+                // Figur ist im Ziel
+                if (position == GameState.finishedPosition) {
+                  // Berechne Position im Zielbereich
+                  final finishPosition = _calculateFinishPosition(player.id, tokenIndex, boardSize);
+                  return _buildToken(player, tokenIndex, finishPosition, fieldSize);
+                }
+                
+                // Figur ist auf dem Heimweg
+                if (position >= GameState.totalFields) {
+                  final homePosition = _calculateHomePathPosition(player.id, position - GameState.totalFields, boardSize);
+                  return _buildToken(player, tokenIndex, homePosition, fieldSize);
+                }
+                
+                // Figur ist auf dem Hauptspielfeld
+                final boardPosition = _calculateFieldPosition(position, boardSize);
+                return _buildToken(player, tokenIndex, boardPosition, fieldSize);
+              });
+            }).toList(),
+            
+            // Safe Zones markieren
+            ...gameState.players.map((player) {
+              final safeIndex = gameState.startIndex[player.id]!;
+              final position = _calculateFieldPosition(safeIndex, boardSize);
+              final playerColor = _getPlayerColor(player.id);
+              
+              return Positioned(
+                left: position.dx - fieldSize / 2,
+                top: position.dy - fieldSize / 2,
+                child: Container(
+                  width: fieldSize,
+                  height: fieldSize,
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: playerColor,
+                      width: 3,
+                      style: BorderStyle.solid,
+>>>>>>> ea7bbac21da49f2d140669fcb86aadd27e68f98e
                     ),
                   ),
                 );
@@ -435,6 +521,161 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
     
     return positions;
+  }
+
+  // Baut eine einzelne Spielfigur
+  Widget _buildToken(Player player, int tokenIndex, Offset position, double fieldSize) {
+    final playerColor = _getPlayerColor(player.id);
+    final canBeMoved = Provider.of<GameProvider>(context, listen: false)
+        .getPossibleMoveDetails()
+        .any((move) => move['tokenIndex'] == tokenIndex);
+    
+    return Positioned(
+      left: position.dx - fieldSize / 2,
+      top: position.dy - fieldSize / 2,
+      child: GestureDetector(
+        onTap: canBeMoved ? () => _showMoveOptions(player.id, tokenIndex) : null,
+        child: Container(
+          width: fieldSize,
+          height: fieldSize,
+          decoration: BoxDecoration(
+            color: playerColor,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: Colors.white,
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 3,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Text(
+              (tokenIndex + 1).toString(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Zeigt Popup mit möglichen Zügen für diese Figur
+  void _showMoveOptions(String playerId, int tokenIndex) {
+    if (playerId != Provider.of<GameProvider>(context, listen: false).gameState.currentTurnPlayerId) {
+      return;
+    }
+    
+    final moveDetails = Provider.of<GameProvider>(context, listen: false)
+        .getPossibleMoveDetails()
+        .where((move) => move['tokenIndex'] == tokenIndex)
+        .toList();
+        
+    if (moveDetails.isEmpty) return;
+    
+    // Wenn nur ein möglicher Zug, direkt ausführen
+    if (moveDetails.length == 1) {
+      _moveToken(Provider.of<GameProvider>(context, listen: false), 
+        tokenIndex, moveDetails[0]['targetPosition']!);
+      return;
+    }
+    
+    // Hier könnte ein Dialog angezeigt werden, falls mehrere Ziele möglich sind
+    // Aktuell nicht nötig, da immer nur ein Ziel pro Figur möglich ist
+  }
+
+  // Berechnet die Position in der Basis eines Spielers
+  Offset _calculateBasePosition(String playerId, int tokenIndex, double boardSize) {
+    final fieldSize = boardSize / 13;
+    final basePositions = {
+      'player1': [
+        Offset(2 * fieldSize, 2 * fieldSize),
+        Offset(4 * fieldSize, 2 * fieldSize),
+        Offset(2 * fieldSize, 4 * fieldSize),
+        Offset(4 * fieldSize, 4 * fieldSize),
+      ],
+      'player2': [
+        Offset(9 * fieldSize, 2 * fieldSize),
+        Offset(11 * fieldSize, 2 * fieldSize),
+        Offset(9 * fieldSize, 4 * fieldSize),
+        Offset(11 * fieldSize, 4 * fieldSize),
+      ],
+      'player3': [
+        Offset(9 * fieldSize, 9 * fieldSize),
+        Offset(11 * fieldSize, 9 * fieldSize),
+        Offset(9 * fieldSize, 11 * fieldSize),
+        Offset(11 * fieldSize, 11 * fieldSize),
+      ],
+      'player4': [
+        Offset(2 * fieldSize, 9 * fieldSize),
+        Offset(4 * fieldSize, 9 * fieldSize),
+        Offset(2 * fieldSize, 11 * fieldSize),
+        Offset(4 * fieldSize, 11 * fieldSize),
+      ],
+    };
+    
+    return basePositions[playerId]![tokenIndex];
+  }
+  
+  // Berechnet die Position im Zielbereich
+  Offset _calculateFinishPosition(String playerId, int tokenIndex, double boardSize) {
+    final fieldSize = boardSize / 13;
+    final finishPositions = {
+      'player1': Offset(6 * fieldSize, 6 * fieldSize),
+      'player2': Offset(7 * fieldSize, 6 * fieldSize),
+      'player3': Offset(7 * fieldSize, 7 * fieldSize),
+      'player4': Offset(6 * fieldSize, 7 * fieldSize),
+    };
+    
+    // Im Zielfeld werden die Tokens gestapelt
+    return finishPositions[playerId]!;
+  }
+  
+  // Berechnet die Position auf dem Heimweg (Zielgerade)
+  Offset _calculateHomePathPosition(String playerId, int homePathIndex, double boardSize) {
+    final fieldSize = boardSize / 13;
+    
+    // Pfadkoordinaten für jeden Spieler
+    final homePaths = {
+      'player1': [
+        Offset(6 * fieldSize, 5 * fieldSize),
+        Offset(6 * fieldSize, 4 * fieldSize),
+        Offset(6 * fieldSize, 3 * fieldSize),
+        Offset(6 * fieldSize, 2 * fieldSize),
+      ],
+      'player2': [
+        Offset(7 * fieldSize, 6 * fieldSize),
+        Offset(8 * fieldSize, 6 * fieldSize),
+        Offset(9 * fieldSize, 6 * fieldSize),
+        Offset(10 * fieldSize, 6 * fieldSize),
+      ],
+      'player3': [
+        Offset(6 * fieldSize, 7 * fieldSize),
+        Offset(6 * fieldSize, 8 * fieldSize),
+        Offset(6 * fieldSize, 9 * fieldSize),
+        Offset(6 * fieldSize, 10 * fieldSize),
+      ],
+      'player4': [
+        Offset(5 * fieldSize, 6 * fieldSize),
+        Offset(4 * fieldSize, 6 * fieldSize),
+        Offset(3 * fieldSize, 6 * fieldSize),
+        Offset(2 * fieldSize, 6 * fieldSize),
+      ],
+    };
+    
+    if (homePathIndex >= 0 && homePathIndex < homePaths[playerId]!.length) {
+      return homePaths[playerId]![homePathIndex];
+    }
+    
+    // Fallback
+    return Offset(6 * fieldSize, 6 * fieldSize);
   }
 
   // Berechnet die Position eines Feldes auf dem Spielbrett
@@ -547,8 +788,251 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   // Spielfigur bewegen
-  Future<void> _moveToken(GameProvider gameProvider, int targetIndex) async {
-    await gameProvider.moveToken(targetIndex);
+  Future<void> _moveToken(GameProvider gameProvider, int tokenIndex, int targetPosition) async {
+    await gameProvider.moveToken(tokenIndex, targetPosition);
+  }
+
+  // Zeigt den Gewinnbildschirm als Dialog an
+  void _showWinnerDialog(Player winner) {
+    final playerColor = _getPlayerColor(winner.id);
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('🎉 Spielende 🎉', 
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 20),
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: playerColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 5,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Text(
+                    winner.name.substring(0, 1).toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 28,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                '${winner.name} hat gewonnen!',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Herzlichen Glückwunsch!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 30),
+            ],
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Dialog schließen
+                Navigator.of(context).pop(); // Zum Hauptmenü zurückkehren
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              ),
+              child: const Text('Zurück zum Hauptmenü'),
+            ),
+            const SizedBox(width: 10),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Dialog schließen
+                
+                // Neues Spiel mit den gleichen Spielern starten
+                final gameProvider = Provider.of<GameProvider>(context, listen: false);
+                gameProvider.startNewGame(
+                  gameProvider.gameState.players.map((p) => 
+                    Player(p.id, p.name, isAI: p.isAI)).toList()
+                );
+                
+                // Dialog-Flag zurücksetzen
+                setState(() {
+                  _winnerDialogShown = false;
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              ),
+              child: const Text('Neues Spiel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Zeigt einen Dialog zum Speichern des Spiels
+  void _showSaveDialog() {
+    final TextEditingController nameController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Spiel speichern'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Gib einen Namen für deinen Spielstand ein:',
+                style: TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Name des Spielstands',
+                  border: OutlineInputBorder(),
+                ),
+                autofocus: true,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Abbrechen'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final name = nameController.text.trim();
+                final customName = name.isNotEmpty ? name : null;
+                
+                Navigator.of(context).pop();
+                
+                final gameProvider = Provider.of<GameProvider>(context, listen: false);
+                final success = await gameProvider.saveGame(customName: customName);
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      success 
+                        ? 'Spiel erfolgreich gespeichert!' 
+                        : 'Fehler beim Speichern des Spiels.',
+                    ),
+                    backgroundColor: success ? Colors.green : Colors.red,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+              ),
+              child: const Text('Speichern'),
+            ),
+          ],
+        );
+      },
+    ).then((_) {
+      // Controller freigeben, wenn der Dialog geschlossen wird
+      nameController.dispose();
+    });
+  }
+
+  // Zeigt den Dialog für Sound-Einstellungen
+  void _showSoundSettingsDialog() {
+    final gameProvider = Provider.of<GameProvider>(context, listen: false);
+    bool soundEnabled = gameProvider.isSoundEnabled;
+    double volume = gameProvider.volume;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Sound-Einstellungen'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Sound an/aus
+                  SwitchListTile(
+                    title: const Text('Sound'),
+                    value: soundEnabled,
+                    onChanged: (value) {
+                      setState(() {
+                        soundEnabled = value;
+                      });
+                      gameProvider.setSoundEnabled(value);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  // Lautstärke einstellen
+                  Row(
+                    children: [
+                      const Icon(Icons.volume_down),
+                      Expanded(
+                        child: Slider(
+                          value: volume,
+                          min: 0.0,
+                          max: 1.0,
+                          divisions: 10,
+                          onChanged: soundEnabled
+                              ? (value) {
+                                  setState(() {
+                                    volume = value;
+                                  });
+                                  gameProvider.setVolume(value);
+                                }
+                              : null,
+                        ),
+                      ),
+                      const Icon(Icons.volume_up),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Schließen'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }
 
