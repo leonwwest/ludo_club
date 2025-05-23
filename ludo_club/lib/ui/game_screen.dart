@@ -372,7 +372,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   ),
                 ),
               );
-            }),
+            }).toList(),
           ],
         );
       },
@@ -508,7 +508,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     // Wenn nur ein möglicher Zug, direkt ausführen
     if (moveDetails.length == 1) {
       _moveToken(Provider.of<GameProvider>(context, listen: false), 
-        tokenIndex, moveDetails[0]['targetPosition']!);
+                tokenIndex, moveDetails[0]['targetPosition']!);
       return;
     }
     
