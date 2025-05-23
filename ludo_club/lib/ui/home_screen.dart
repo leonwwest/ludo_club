@@ -4,6 +4,7 @@ import '../providers/game_provider.dart';
 import '../models/game_state.dart';
 import 'game_screen.dart';
 import 'saved_games_screen.dart';
+import 'player_stats_screen.dart'; // Import PlayerStatsScreen
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -172,6 +173,26 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue.shade600,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16), // Add space before the new button
+              ElevatedButton.icon(
+                icon: const Icon(Icons.bar_chart),
+                label: const Text(
+                  'Player Statistics',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const PlayerStatsScreen()),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal, // Different color for distinction
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),

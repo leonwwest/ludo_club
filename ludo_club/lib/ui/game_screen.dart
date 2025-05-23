@@ -17,6 +17,34 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   int _displayDiceValue = 1;
   bool _winnerDialogShown = false;
 
+  // Pawn Animation
+  late AnimationController _pawnAnimationController;
+  late Animation<Offset> _pawnAnimation;
+  String? _animatingPlayerId;
+  int? _animatingTokenIndex;
+  Offset? _animationCurrentOffset;
+  // Temporary storage for move details during animation
+  int? _actualPlayerIdForMove;
+  int? _actualTokenIndexForMove;
+  int? _actualTargetLogicalPosition;
+
+  // Capture Animation
+  late AnimationController _captureAnimationController;
+  late Animation<double> _captureSparkleAnimation;
+  Offset? _captureEffectScreenPosition;
+  bool _isCaptureAnimating = false;
+  Color _effectColor = Colors.orangeAccent; // Default color for sparkle
+
+  // Reached Home Animation
+  late AnimationController _reachedHomeAnimationController;
+  late Animation<double> _reachedHomeShineAnimation;
+  Offset? _reachedHomeEffectScreenPosition;
+  bool _isReachedHomeAnimating = false;
+  String? _reachedHomeAnimatingPlayerId;
+  int? _reachedHomeAnimatingTokenIndex;
+  Color _reachedHomeEffectColor = Colors.amber; // Color for home shine
+
+
   @override
   void initState() {
     super.initState();
@@ -35,12 +63,162 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         });
       }
     });
+
+    // Pawn Animation Initialization
+    _pawnAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 500), // Adjust duration as needed
+      vsync: this,
+    );
+
+    _pawnAnimationController.addListener(() {
+      if (_animatingPlayerId != null && _animatingTokenIndex != null) {
+        setState(() {
+          _animationCurrentOffset = _pawnAnimation.value;
+        });
+      }
+    });
+
+    _pawnAnimationController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        final gameProvider = Provider.of<GameProvider>(context, listen: false);
+        if (_actualPlayerIdForMove != null && _actualTokenIndexForMove != null && _actualTargetLogicalPosition != null) {
+          gameProvider.moveToken(_actualTokenIndexForMove!, _actualTargetLogicalPosition!)
+            .then((bool captureOccurred) { 
+              if (captureOccurred && gameProvider.showCaptureEffect) {
+                _startCaptureAnimation(gameProvider);
+              }
+              // Now check for reached home effect, independent of capture
+              if (gameProvider.showReachedHomeEffect && 
+                  gameProvider.reachedHomePlayerId == _actualPlayerIdForMove &&
+                  gameProvider.reachedHomeTokenIndex == _actualTokenIndexForMove) {
+                _startReachedHomeAnimation(gameProvider, _actualPlayerIdForMove!, _actualTokenIndexForMove!);
+              }
+            });
+        }
+        setState(() {
+          _animatingPlayerId = null;
+          _animatingTokenIndex = null;
+          _animationCurrentOffset = null;
+          _actualPlayerIdForMove = null;
+          _actualTokenIndexForMove = null;
+          _actualTargetLogicalPosition = null;
+          gameProvider.isAnimating = false; 
+        });
+      } else if (status == AnimationStatus.dismissed) {
+        final gameProvider = Provider.of<GameProvider>(context, listen: false);
+         setState(() {
+          _animatingPlayerId = null;
+          _animatingTokenIndex = null;
+          _animationCurrentOffset = null;
+          _actualPlayerIdForMove = null;
+          _actualTokenIndexForMove = null;
+          _actualTargetLogicalPosition = null;
+          if (gameProvider.isAnimating) {
+            gameProvider.isAnimating = false;
+          }
+        });
+      }
+    });
+
+    // Capture Animation Initialization
+    _captureAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 600), 
+      vsync: this,
+    );
+    _captureSparkleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _captureAnimationController, curve: Curves.easeOut),
+    );
+    _captureAnimationController.addListener(() {
+      if(_isCaptureAnimating) {
+        setState(() {}); 
+      }
+    });
+    _captureAnimationController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        setState(() { _isCaptureAnimating = false; _captureEffectScreenPosition = null; });
+        Provider.of<GameProvider>(context, listen: false).clearCaptureEffect();
+      } else if (status == AnimationStatus.dismissed) {
+         setState(() { _isCaptureAnimating = false; _captureEffectScreenPosition = null; });
+        Provider.of<GameProvider>(context, listen: false).clearCaptureEffect();
+      }
+    });
+
+    // Reached Home Animation Initialization
+    _reachedHomeAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 700), // Slightly longer for effect
+      vsync: this,
+    );
+    _reachedHomeShineAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _reachedHomeAnimationController, curve: Curves.easeInOut),
+    );
+    _reachedHomeAnimationController.addListener(() {
+      if(_isReachedHomeAnimating) {
+        setState(() {});
+      }
+    });
+    _reachedHomeAnimationController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        setState(() { _isReachedHomeAnimating = false; _reachedHomeEffectScreenPosition = null; _reachedHomeAnimatingPlayerId = null; _reachedHomeAnimatingTokenIndex = null; });
+        Provider.of<GameProvider>(context, listen: false).clearReachedHomeEffect();
+      } else if (status == AnimationStatus.dismissed) {
+        setState(() { _isReachedHomeAnimating = false; _reachedHomeEffectScreenPosition = null; _reachedHomeAnimatingPlayerId = null; _reachedHomeAnimatingTokenIndex = null; });
+        Provider.of<GameProvider>(context, listen: false).clearReachedHomeEffect();
+      }
+    });
   }
 
   @override
   void dispose() {
     _diceAnimationController.dispose();
+    _pawnAnimationController.dispose();
+    _captureAnimationController.dispose();
+    _reachedHomeAnimationController.dispose(); // Dispose reached home animation controller
     super.dispose();
+  }
+
+  void _startCaptureAnimation(GameProvider gameProvider) {
+    if (gameProvider.captureEffectBoardIndex == null) return;
+
+    final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
+    final double boardSize = renderBox?.hasSize == true 
+        ? renderBox!.size.width 
+        : MediaQuery.of(context).size.width - 32; 
+
+    _effectColor = Colors.orangeAccent; 
+
+    _captureEffectScreenPosition = _getOffsetForLogicalPosition(
+        gameProvider.gameState.currentTurnPlayerId, 
+        0, 
+        gameProvider.captureEffectBoardIndex!,
+        boardSize,
+        gameProvider.gameState);
+
+    setState(() { _isCaptureAnimating = true; });
+    _captureAnimationController.forward(from: 0.0);
+  }
+
+  void _startReachedHomeAnimation(GameProvider gameProvider, String playerId, int tokenIndex) {
+    final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
+    final double boardSize = renderBox?.hasSize == true
+        ? renderBox!.size.width
+        : MediaQuery.of(context).size.width - 32;
+
+    _reachedHomeEffectColor = _getPlayerColor(playerId); // Color based on player
+
+    // The effect should be at the finished position of this specific token
+    _reachedHomeEffectScreenPosition = _getOffsetForLogicalPosition(
+        playerId,
+        tokenIndex, // Use the actual token index
+        GameState.finishedPosition, // Logical position is always 'finished'
+        boardSize,
+        gameProvider.gameState);
+    
+    setState(() {
+      _isReachedHomeAnimating = true;
+      _reachedHomeAnimatingPlayerId = playerId;
+      _reachedHomeAnimatingTokenIndex = tokenIndex;
+    });
+    _reachedHomeAnimationController.forward(from: 0.0);
   }
 
   @override
@@ -120,12 +298,25 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                                 ),
                               ),
                               if (gameState.currentPlayer.isAI)
-                                const Text(
-                                  '(KI-Spieler)',
-                                  style: TextStyle(
-                                    fontStyle: FontStyle.italic,
-                                    color: Colors.blue,
-                                  ),
+                                Row(
+                                  children: [
+                                    const Text(
+                                      '(KI-Spieler)',
+                                      style: TextStyle(
+                                        fontStyle: FontStyle.italic,
+                                        color: Colors.blue,
+                                      ),
+                                    ),
+                                    if (gameProvider.isAiThinking)
+                                      const Padding(
+                                        padding: EdgeInsets.only(left: 8.0),
+                                        child: SizedBox(
+                                          width: 12, 
+                                          height: 12,
+                                          child: CircularProgressIndicator(strokeWidth: 2.0),
+                                        ),
+                                      ),
+                                  ],
                                 ),
                             ],
                           ),
@@ -289,18 +480,28 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             // Spielfelder und Zielpositionen hervorheben
             ...moveDetails.map((move) {
               final targetPos = move['targetPosition']!;
+              final tokenIdxToAnimate = move['tokenIndex']!; // This is the token index for the current player
+              final currentPlayerId = gameState.currentTurnPlayerId;
+
               if (targetPos == GameState.finishedPosition) {
-                // Zielposition besonders markieren
-                return Container(); // Platzhalter, kann später angepasst werden
+                return Container(); 
               }
               
-              final position = _calculateFieldPosition(targetPos, boardSize);
+              // Calculate screen position for the highlighted target field
+              // This highlighting itself doesn't need animation, it's just a target indicator.
+              final position = _getOffsetForLogicalPosition(currentPlayerId, tokenIdxToAnimate, targetPos, boardSize, gameState);
               
               return Positioned(
                 left: position.dx - fieldSize / 2,
                 top: position.dy - fieldSize / 2,
                 child: GestureDetector(
-                  onTap: () => _moveToken(gameProvider, move['tokenIndex']!, targetPos),
+                  onTap: () => _initiatePawnAnimation(
+                    gameProvider,
+                    currentPlayerId,
+                    tokenIdxToAnimate,
+                    targetPos,
+                    boardSize // Pass boardSize
+                  ),
                   child: Container(
                     width: fieldSize,
                     height: fieldSize,
@@ -321,33 +522,53 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             ...gameState.players.expand((player) {
               return player.tokenPositions.asMap().entries.map((entry) {
                 final tokenIndex = entry.key;
-                final position = entry.value;
-                
-                // Figur ist in der Basis
-                if (position == GameState.basePosition) {
-                  // Berechne Position in der Basis des Spielers
-                  final basePosition = _calculateBasePosition(player.id, tokenIndex, boardSize);
-                  return _buildToken(player, tokenIndex, basePosition, fieldSize);
+                final logicalPosition = entry.value;
+                Offset displayPosition;
+
+                if (player.id == _animatingPlayerId && tokenIndex == _animatingTokenIndex && _animationCurrentOffset != null) {
+                  displayPosition = _animationCurrentOffset!;
+                } else {
+                  displayPosition = _getOffsetForLogicalPosition(player.id, tokenIndex, logicalPosition, boardSize, gameState);
                 }
-                
-                // Figur ist im Ziel
-                if (position == GameState.finishedPosition) {
-                  // Berechne Position im Zielbereich
-                  final finishPosition = _calculateFinishPosition(player.id, tokenIndex, boardSize);
-                  return _buildToken(player, tokenIndex, finishPosition, fieldSize);
-                }
-                
-                // Figur ist auf dem Heimweg
-                if (position >= GameState.totalFields) {
-                  final homePosition = _calculateHomePathPosition(player.id, position - GameState.totalFields, boardSize);
-                  return _buildToken(player, tokenIndex, homePosition, fieldSize);
-                }
-                
-                // Figur ist auf dem Hauptspielfeld
-                final boardPosition = _calculateFieldPosition(position, boardSize);
-                return _buildToken(player, tokenIndex, boardPosition, fieldSize);
+                return _buildToken(player, tokenIndex, displayPosition, fieldSize, gameProvider, gameState, boardSize);
               });
             }).toList(),
+
+            // Capture Effect Animation
+            if (_isCaptureAnimating && _captureEffectScreenPosition != null)
+              Positioned(
+                left: _captureEffectScreenPosition!.dx - (fieldSize), 
+                top: _captureEffectScreenPosition!.dy - (fieldSize),
+                child: SizedBox( 
+                  width: fieldSize * 2,
+                  height: fieldSize * 2,
+                  child: CustomPaint(
+                    painter: CaptureEffectPainter(
+                      animationValue: _captureSparkleAnimation.value,
+                      color: _effectColor, 
+                    ),
+                    size: Size(fieldSize * 2, fieldSize * 2), 
+                  ),
+                ),
+              ),
+
+            // Reached Home Effect Animation
+            if (_isReachedHomeAnimating && _reachedHomeEffectScreenPosition != null)
+              Positioned(
+                left: _reachedHomeEffectScreenPosition!.dx - fieldSize, // Center effect area on token
+                top: _reachedHomeEffectScreenPosition!.dy - fieldSize,
+                child: SizedBox(
+                  width: fieldSize * 2, // Area for painter to draw the glow
+                  height: fieldSize * 2,
+                  child: CustomPaint(
+                    painter: ReachedHomeEffectPainter(
+                      animationValue: _reachedHomeShineAnimation.value,
+                      color: _reachedHomeEffectColor,
+                    ),
+                    size: Size(fieldSize * 2, fieldSize * 2),
+                  ),
+                ),
+              ),
             
             // Safe Zones markieren
             ...gameState.players.map((player) {
@@ -449,9 +670,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   // Baut eine einzelne Spielfigur
-  Widget _buildToken(Player player, int tokenIndex, Offset position, double fieldSize) {
+  Widget _buildToken(Player player, int tokenIndex, Offset position, double fieldSize, GameProvider gameProvider, GameState gameState, double boardSize) {
     final playerColor = _getPlayerColor(player.id);
-    final canBeMoved = Provider.of<GameProvider>(context, listen: false)
+    // Check if this specific token can be moved by the current player
+    final bool isCurrentPlayerToken = player.id == gameState.currentTurnPlayerId;
+    final canBeMoved = isCurrentPlayerToken && gameProvider
         .getPossibleMoveDetails()
         .any((move) => move['tokenIndex'] == tokenIndex);
     
@@ -459,7 +682,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       left: position.dx - fieldSize / 2,
       top: position.dy - fieldSize / 2,
       child: GestureDetector(
-        onTap: canBeMoved ? () => _showMoveOptions(player.id, tokenIndex) : null,
+        onTap: canBeMoved && !gameProvider.isAnimating
+          ? () => _showMoveOptions(gameProvider, player.id, tokenIndex, gameState, boardSize) // boardSize already passed
+          : null,
         child: Container(
           width: fieldSize,
           height: fieldSize,
@@ -493,27 +718,35 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   // Zeigt Popup mit möglichen Zügen für diese Figur
-  void _showMoveOptions(String playerId, int tokenIndex) {
-    if (playerId != Provider.of<GameProvider>(context, listen: false).gameState.currentTurnPlayerId) {
+  void _showMoveOptions(GameProvider gameProvider, String playerId, int tokenIndex, GameState gameState, double boardSize) {
+    if (playerId != gameState.currentTurnPlayerId || gameProvider.isAnimating) {
       return;
     }
     
-    final moveDetails = Provider.of<GameProvider>(context, listen: false)
+    final moveDetailsForThisToken = gameProvider
         .getPossibleMoveDetails()
         .where((move) => move['tokenIndex'] == tokenIndex)
         .toList();
         
-    if (moveDetails.isEmpty) return;
+    if (moveDetailsForThisToken.isEmpty) return;
     
-    // Wenn nur ein möglicher Zug, direkt ausführen
-    if (moveDetails.length == 1) {
-      _moveToken(Provider.of<GameProvider>(context, listen: false), 
-                tokenIndex, moveDetails[0]['targetPosition']!);
-      return;
+    final targetLogicalPosition = moveDetailsForThisToken[0]['targetPosition']!;
+    
+    // Pass boardSize to _initiatePawnAnimation
+    _initiatePawnAnimation(gameProvider, playerId, tokenIndex, targetLogicalPosition, boardSize);
+  }
+
+  // Helper to get screen offset for any logical game position
+  Offset _getOffsetForLogicalPosition(String playerId, int tokenIndex, int logicalPosition, double boardSize, GameState gameState) {
+    if (logicalPosition == GameState.basePosition) {
+      return _calculateBasePosition(playerId, tokenIndex, boardSize);
+    } else if (logicalPosition == GameState.finishedPosition) {
+      return _calculateFinishPosition(playerId, tokenIndex, boardSize);
+    } else if (logicalPosition >= GameState.totalFields) {
+      return _calculateHomePathPosition(playerId, logicalPosition - GameState.totalFields, boardSize);
+    } else {
+      return _calculateFieldPosition(logicalPosition, boardSize);
     }
-    
-    // Hier könnte ein Dialog angezeigt werden, falls mehrere Ziele möglich sind
-    // Aktuell nicht nötig, da immer nur ein Ziel pro Figur möglich ist
   }
 
   // Berechnet die Position in der Basis eines Spielers
@@ -712,10 +945,41 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     });
   }
 
-  // Spielfigur bewegen
-  Future<void> _moveToken(GameProvider gameProvider, int tokenIndex, int targetPosition) async {
-    await gameProvider.moveToken(tokenIndex, targetPosition);
+  // Initiates pawn animation and then calls GameProvider's moveToken upon completion
+  Future<void> _initiatePawnAnimation(GameProvider gameProvider, String playerId, int tokenIndex, int targetLogicalPosition, double boardSize) async {
+    if (gameProvider.isAnimating) return;
+
+    final gameState = gameProvider.gameState;
+    final player = gameState.players.firstWhere((p) => p.id == playerId);
+    final currentLogicalPos = player.tokenPositions[tokenIndex];
+    
+    // boardSize is now passed as a parameter
+
+    _actualPlayerIdForMove = playerId;
+    _actualTokenIndexForMove = tokenIndex;
+    _actualTargetLogicalPosition = targetLogicalPosition;
+
+    setState(() {
+      gameProvider.isAnimating = true;
+      _animatingPlayerId = playerId;
+      _animatingTokenIndex = tokenIndex;
+      
+      Offset startOffset = _getOffsetForLogicalPosition(playerId, tokenIndex, currentLogicalPos, boardSize, gameState);
+      Offset endOffset = _getOffsetForLogicalPosition(playerId, tokenIndex, targetLogicalPosition, boardSize, gameState);
+
+      _pawnAnimation = Tween<Offset>(
+        begin: startOffset,
+        end: endOffset,
+      ).animate(CurvedAnimation(
+        parent: _pawnAnimationController,
+        curve: Curves.easeInOut,
+      ));
+      _animationCurrentOffset = startOffset; 
+    });
+
+    _pawnAnimationController.forward(from: 0.0);
   }
+
 
   // Zeigt den Gewinnbildschirm als Dialog an
   void _showWinnerDialog(Player winner) {
@@ -1210,6 +1474,95 @@ class GameBoardPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
+
+// CustomPainter for the Capture Effect
+class CaptureEffectPainter extends CustomPainter {
+  final double animationValue; // 0.0 to 1.0 (progress)
+  final Color color;
+  final int particleCount;
+  final Random random;
+
+  CaptureEffectPainter({
+    required this.animationValue,
+    required this.color,
+    this.particleCount = 5,
+  }) : random = Random();
+
+  @override
+  void paint(Canvas canvas, Size size) { // size is the area given to CustomPaint
+    final Paint paint = Paint()..style = PaintingStyle.fill;
+    
+    double progress = Curves.easeOutCubic.transform(animationValue); // Apply easing
+
+    for (int i = 0; i < particleCount; i++) {
+      // Each particle can have a slightly different behavior based on its index or a random seed
+      final double randomAngle = (random.nextDouble() + i) * (2 * pi / particleCount);
+      final double initialRadius = size.width * 0.1; // Initial distance from center
+      final double maxTravelDistance = size.width * 0.3; // How far particles travel
+
+      // Particles move outwards
+      final double currentDistance = initialRadius + maxTravelDistance * progress;
+      
+      final Offset center = Offset(size.width / 2, size.height / 2);
+      final Offset particleOffset = Offset(
+        center.dx + cos(randomAngle) * currentDistance,
+        center.dy + sin(randomAngle) * currentDistance,
+      );
+      
+      double particleRadius = (size.width / 15) * (1.0 - progress); // Particles shrink
+      if (particleRadius < 0) particleRadius = 0;
+
+      paint.color = color.withOpacity(max(0, 1.0 - progress * 1.5)); // Fade out
+
+      canvas.drawCircle(
+        particleOffset,
+        particleRadius,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CaptureEffectPainter oldDelegate) {
+    return oldDelegate.animationValue != animationValue || 
+           oldDelegate.color != color;
+  }
+}
+
+// CustomPainter for the Reached Home Effect
+class ReachedHomeEffectPainter extends CustomPainter {
+  final double animationValue; // 0.0 to 1.0 (progress)
+  final Color color;
+
+  ReachedHomeEffectPainter({required this.animationValue, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) { // size is the area of the token
+    final Paint paint = Paint();
+    final Offset center = Offset(size.width / 2, size.height / 2);
+    
+    // Create a pulsing glow effect
+    double progress = Curves.easeInOutCubic.transform(animationValue); // Apply easing
+
+    // Outer glow: expands and fades
+    double maxGlowRadius = size.width * 0.8; // Max glow size relative to token
+    paint.color = color.withOpacity(max(0, 0.5 - (progress * 0.5))); // Fades out
+    paint.style = PaintingStyle.fill;
+    canvas.drawCircle(center, maxGlowRadius * progress, paint);
+
+    // Inner shine: a smaller, brighter pulse
+    double maxShineRadius = size.width * 0.5;
+    paint.color = Colors.white.withOpacity(max(0, 0.7 - (progress * 0.7))); // Fades out faster
+    canvas.drawCircle(center, maxShineRadius * progress, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant ReachedHomeEffectPainter oldDelegate) {
+    return oldDelegate.animationValue != animationValue || 
+           oldDelegate.color != color;
+  }
+}
+
 
 class PiecePainter extends CustomPainter {
   final Color color;
