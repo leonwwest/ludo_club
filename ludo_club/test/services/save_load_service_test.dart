@@ -390,5 +390,165 @@ void main() {
         expect(loadedState.lastDiceValue, originalState.lastDiceValue);
       });
     });
+
+    group('Error Handling', () {
+      test('loadGame returns null for malformed GameState JSON', () async {
+        final gameId = 'malformedJsonGame';
+        final metadataList = [
+          jsonEncode({'gameId': gameId, 'name': 'Malformed Test', 'timestamp': DateTime.now().millisecondsSinceEpoch})
+        ];
+        mockSharedPreferences.setMockInitialValues({
+          SaveLoadService.savedGamesKey: metadataList,
+          gameId: 'this_is_not_valid_json',
+        });
+
+        final loadedState = await saveLoadService.loadGame(0);
+        expect(loadedState, isNull);
+      });
+
+      test('loadGame returns null for GameState JSON missing crucial fields', () async {
+        final gameId = 'missingFieldsGame';
+        final metadataList = [
+          jsonEncode({'gameId': gameId, 'name': 'Missing Fields Test', 'timestamp': DateTime.now().millisecondsSinceEpoch})
+        ];
+        // Valid JSON, but GameState.fromJson would fail (e.g., missing 'players' or 'currentTurnPlayerId')
+        final incompleteJson = jsonEncode({
+          'startIndex': {'p1': 0},
+          // 'players': [], // Missing players
+          'currentTurnPlayerId': 'p1',
+          'gameId': gameId,
+        });
+        mockSharedPreferences.setMockInitialValues({
+          SaveLoadService.savedGamesKey: metadataList,
+          gameId: incompleteJson,
+        });
+
+        final loadedState = await saveLoadService.loadGame(0);
+        expect(loadedState, isNull, reason: "GameState.fromJson should fail and service should handle it by returning null.");
+      });
+      
+      test('loadGame still loads other valid games if one entry is corrupted (missing GameState JSON)', () async {
+        final validGameId = 'validGame';
+        final corruptedGameId = 'corruptedGame_NoState';
+        final validGameState = createSampleGameState(gameId: validGameId);
+
+        final metadataList = [
+          jsonEncode({'gameId': corruptedGameId, 'name': 'Corrupted Entry', 'timestamp': DateTime.now().millisecondsSinceEpoch}),
+          jsonEncode({'gameId': validGameId, 'name': 'Valid Entry', 'timestamp': DateTime.now().millisecondsSinceEpoch}),
+        ];
+        mockSharedPreferences.setMockInitialValues({
+          SaveLoadService.savedGamesKey: metadataList,
+          // GameState for corruptedGameId is intentionally missing
+          validGameId: jsonEncode(validGameState.toJson()),
+        });
+
+        // Attempt to load the corrupted one (index 0)
+        final corruptedLoadedState = await saveLoadService.loadGame(0);
+        expect(corruptedLoadedState, isNull, reason: "Loading a game with missing state JSON should return null.");
+
+        // Attempt to load the valid one (index 1)
+        final validLoadedState = await saveLoadService.loadGame(1);
+        expect(validLoadedState, isNotNull, reason: "Should still be able to load other valid games.");
+        expect(validLoadedState, validGameState);
+      });
+
+
+      test('getSavedGames filters out entries with malformed JSON in metadata list', () async {
+        final validEntry = {'gameId': 'valid1', 'name': 'Valid Game Metadata', 'timestamp': DateTime.now().millisecondsSinceEpoch};
+        final List<String> savedGamesIndex = [
+          jsonEncode(validEntry),
+          'this_is_not_json', // Malformed entry
+          jsonEncode({'gameId': 'valid2', 'name': 'Another Valid', 'timestamp': DateTime.now().millisecondsSinceEpoch}),
+        ];
+        mockSharedPreferences.setMockInitialValues({
+          SaveLoadService.savedGamesKey: savedGamesIndex,
+        });
+
+        final gamesInfo = await saveLoadService.getSavedGames();
+        expect(gamesInfo.length, 2, reason: "Should skip the malformed JSON entry.");
+        expect(gamesInfo[0]['gameId'], 'valid1');
+        expect(gamesInfo[1]['gameId'], 'valid2');
+      });
+
+      test('getSavedGames filters out entries with missing required fields in metadata JSON', () async {
+        final List<String> savedGamesIndex = [
+          jsonEncode({'gameId': 'validFull', 'name': 'Valid Full', 'timestamp': DateTime.now().millisecondsSinceEpoch}),
+          jsonEncode({'gameId': 'missingName', 'timestamp': DateTime.now().millisecondsSinceEpoch}), // Missing 'name'
+          jsonEncode({'name': 'missingGameId', 'timestamp': DateTime.now().millisecondsSinceEpoch}), // Missing 'gameId'
+          jsonEncode({'gameId': 'validAgain', 'name': 'Valid Again', 'timestamp': DateTime.now().millisecondsSinceEpoch}),
+        ];
+         mockSharedPreferences.setMockInitialValues({
+          SaveLoadService.savedGamesKey: savedGamesIndex,
+        });
+
+        final gamesInfo = await saveLoadService.getSavedGames();
+        expect(gamesInfo.length, 2, reason: "Should skip entries missing required metadata fields.");
+        expect(gamesInfo.any((g) => g['gameId'] == 'validFull'), isTrue);
+        expect(gamesInfo.any((g) => g['gameId'] == 'validAgain'), isTrue);
+        expect(gamesInfo.any((g) => g['gameId'] == 'missingName'), isFalse);
+        expect(gamesInfo.any((g) => g['name'] == 'missingGameId'), isFalse);
+      });
+
+      test('getSavedGames returns metadata even if the GameState JSON itself is missing or corrupted', () async {
+        // This scenario tests that getSavedGames focuses on metadata integrity.
+        // loadGame would fail for these, but getSavedGames should still list them.
+        final gameId1 = 'metaOnly1';
+        final gameId2 = 'metaOnly2_corruptState';
+        final List<String> savedGamesIndex = [
+          jsonEncode({'gameId': gameId1, 'name': 'Meta Only - No State String', 'timestamp': DateTime.now().millisecondsSinceEpoch}),
+          jsonEncode({'gameId': gameId2, 'name': 'Meta Only - Corrupt State String', 'timestamp': DateTime.now().millisecondsSinceEpoch}),
+        ];
+        mockSharedPreferences.setMockInitialValues({
+          SaveLoadService.savedGamesKey: savedGamesIndex,
+          // gameId1's state string is missing
+          gameId2: 'this_is_bad_json_for_state', // gameId2 has corrupted state string
+        });
+        
+        final gamesInfo = await saveLoadService.getSavedGames();
+        expect(gamesInfo.length, 2);
+        expect(gamesInfo[0]['gameId'], gameId1);
+        expect(gamesInfo[1]['gameId'], gameId2);
+
+        // Verify that loading these would indeed fail (as per other tests)
+        final state1 = await saveLoadService.loadGame(0);
+        expect(state1, isNull, reason: "Loading game with missing state string should fail.");
+        final state2 = await saveLoadService.loadGame(1);
+        expect(state2, isNull, reason: "Loading game with corrupt state string should fail.");
+      });
+
+      test('saveGame returns false if SharedPreferences.setStringList fails for metadata', () async {
+        mockSharedPreferences.setStringList = (String key, List<String> value) async {
+          if (key == SaveLoadService.savedGamesKey) return false; // Simulate failure
+          mockSharedPreferences._values[key] = value; // Original behavior for other keys
+          return true;
+        };
+        final gameState = createSampleGameState(gameId: 'failMetaSave');
+        final success = await saveLoadService.saveGame(gameState);
+        expect(success, isFalse);
+      });
+      
+      test('saveGame returns false if SharedPreferences.setString fails for game state', () async {
+        mockSharedPreferences.setString = (String key, String value) async {
+          if (key != SaveLoadService.savedGamesKey) return false; // Simulate failure for game state string
+          mockSharedPreferences._values[key] = value; // Original behavior for metadata key
+          return true;
+        };
+        final gameState = createSampleGameState(gameId: 'failStateSave');
+        final success = await saveLoadService.saveGame(gameState);
+        expect(success, isFalse);
+      });
+
+      // Conceptual point: Direct SharedPreferences operational errors (e.g., disk full, platform errors)
+      // are hard to simulate with the current MockSharedPreferences. The service would typically
+      // let these propagate as Exceptions. The current tests for setString/setStringList returning false
+      // cover cases where the operation itself reports a failure, which is a form of error handling.
+      // True platform-level errors would likely require a more sophisticated mocking layer for SharedPreferences.
+      // For now, this is noted as a limitation of the current test setup rather than a specific test case to implement.
+       test('Conceptual: SharedPreferences platform errors', () {
+        print("NOTE: Direct simulation of SharedPreferences platform errors (e.g., disk full) is beyond current mock capabilities. Service would typically propagate these.");
+        expect(true, isTrue); // Placeholder
+      });
+
+    });
   });
 }

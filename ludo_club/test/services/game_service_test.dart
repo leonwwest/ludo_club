@@ -822,6 +822,182 @@ void main() {
         expect(aiMove.newPosition, GameService.homePathBaseIndexP1 + 0); // Enters home path
       });
 
+      test('AI returns null if all pieces are blocked or home and no valid move exists', () {
+        // P1 (AI) has 2 pieces home, 2 pieces on board but blocked by each other.
+        final state = createAIMoveTestState(
+          currentTurnPlayerId: 'p1',
+          diceRoll: 2, // Any roll that wouldn't unblock them
+          pieces: {
+            'p1': [GameService.homeIndexP1, GameService.homeIndexP1, 5, 7], // Piece at 5 is blocked by piece at 7 if dice is 2
+            'p2': []
+          },
+        );
+        final aiMove = gameService.makeAIMove(state);
+        expect(aiMove, isNull, reason: "AI should have no move if all pieces are home or blocked.");
+      });
+
+      test('AI prefers moving into home over capturing an opponent', () {
+        // P1 (AI) can move piece 0 into home (55 with roll 2 -> 57)
+        // OR P1 can move piece 1 (at 10) to capture p2's piece at 12 with roll 2.
+        final state = createAIMoveTestState(
+          currentTurnPlayerId: 'p1',
+          diceRoll: 2,
+          pieces: {
+            'p1': [GameService.homePathBaseIndexP1 + 4, 10, -1, -1], // Piece 0 is at home path 4 (needs 2 to get home)
+            'p2': [12, -1, -1, -1]  // P2 piece at 12
+          },
+        );
+        final aiMove = gameService.makeAIMove(state);
+        expect(aiMove, isNotNull);
+        expect(aiMove!.pieceIndex, 0, reason: "AI should prioritize moving piece 0 home.");
+        expect(aiMove.isMovingToHome, isTrue);
+        expect(aiMove.newPosition, GameService.homeIndexP1);
+      });
+
+      test('AI prefers capturing over getting a piece out of base', () {
+        // P1 (AI) can move piece 0 (at 2) to capture p2's piece at 5 with roll 3.
+        // OR P1 can move piece 1 (at -1, base) out to field 0 with roll 6 (if dice was 6).
+        // Let's adjust: dice is 3. P1 can capture or make a regular move with another piece.
+        // New scenario: Dice is 6. P1 can get piece 0 out of base OR capture with piece 1.
+        final state = createAIMoveTestState(
+          currentTurnPlayerId: 'p1',
+          diceRoll: 6,
+          pieces: {
+            'p1': [-1, 5, -1, -1], // Piece 0 at base, Piece 1 at 5
+            'p2': [11, -1, -1, -1] // P2 piece at 11. P1 piece at 5 can capture with roll 6.
+          },
+        );
+        final aiMove = gameService.makeAIMove(state);
+        expect(aiMove, isNotNull);
+        expect(aiMove!.pieceIndex, 1, reason: "AI should prioritize capturing with piece 1.");
+        expect(aiMove.isCapture, isTrue);
+        expect(aiMove.newPosition, 11);
+      });
+      
+      test('AI prefers getting piece out of base over a less valuable regular move', () {
+        // P1 (AI) rolls a 6.
+        // Piece 0 is at base (-1). Can move to start (0).
+        // Piece 1 is at field 20. Can move to 26.
+        // Getting out of base is higher priority.
+        final state = createAIMoveTestState(
+          currentTurnPlayerId: 'p1',
+          diceRoll: 6,
+          pieces: {
+            'p1': [-1, 20, -1, -1],
+            'p2': []
+          },
+        );
+        final aiMove = gameService.makeAIMove(state);
+        expect(aiMove, isNotNull);
+        expect(aiMove!.pieceIndex, 0, reason: "AI should prioritize getting piece 0 out of base.");
+        expect(aiMove.isMoveOutOfBase, isTrue);
+        expect(aiMove.newPosition, startIndices['p1']);
+      });
+
+      test('AI chooses furthest valid regular move if no other priorities', () {
+        // P1 (AI) rolls 3.
+        // Piece 0 at 1. Can move to 4.
+        // Piece 1 at 10. Can move to 13. (Furthest piece)
+        // Piece 2 at 5. Can move to 8.
+        final state = createAIMoveTestState(
+          currentTurnPlayerId: 'p1',
+          diceRoll: 3,
+          pieces: {
+            'p1': [1, 10, 5, -1],
+            'p2': []
+          },
+        );
+        final aiMove = gameService.makeAIMove(state);
+        expect(aiMove, isNotNull);
+        expect(aiMove!.pieceIndex, 1, reason: "AI should choose to move the furthest piece (piece 1 at 10).");
+        expect(aiMove.newPosition, 13);
+      });
+
+      test('Complex: Home > Capture > OutOfBase > Furthest. Scenario: Home available.', () {
+        final state = createAIMoveTestState(
+          currentTurnPlayerId: 'p1',
+          diceRoll: 2,
+          pieces: {
+            'p1': [
+              GameService.homePathBaseIndexP1 + 4, // Piece 0: Can go home (55 -> 57)
+              10,                                  // Piece 1: Can capture p2_piece0 (10 -> 12)
+              -1,                                  // Piece 2: Can go out of base (if dice was 6)
+              20                                   // Piece 3: Regular move (20 -> 22)
+            ],
+            'p2': [12, -1, -1, -1] // p2_piece0 at 12
+          },
+        );
+        final aiMove = gameService.makeAIMove(state);
+        expect(aiMove, isNotNull);
+        expect(aiMove!.pieceIndex, 0, reason: "AI should prioritize HOME.");
+        expect(aiMove.isMovingToHome, isTrue);
+      });
+
+      test('Complex: Home > Capture > OutOfBase > Furthest. Scenario: Capture available, Home not.', () {
+        final state = createAIMoveTestState(
+          currentTurnPlayerId: 'p1',
+          diceRoll: 2, // Dice roll is 2
+          pieces: {
+            'p1': [
+              GameService.homePathBaseIndexP1 + 3, // Piece 0: Needs 3 to go home, cannot move.
+              10,                                  // Piece 1: Can capture p2_piece0 (10 -> 12)
+              -1,                                  // Piece 2: Can go out of base (if dice was 6)
+              20                                   // Piece 3: Regular move (20 -> 22)
+            ],
+            'p2': [12, -1, -1, -1] // p2_piece0 at 12
+          },
+        );
+        final aiMove = gameService.makeAIMove(state);
+        expect(aiMove, isNotNull);
+        expect(aiMove!.pieceIndex, 1, reason: "AI should prioritize CAPTURE.");
+        expect(aiMove.isCapture, isTrue);
+      });
+      
+      test('Complex: Home > Capture > OutOfBase > Furthest. Scenario: OutOfBase available, Home/Capture not.', () {
+        final state = createAIMoveTestState(
+          currentTurnPlayerId: 'p1',
+          diceRoll: 6, // Dice roll is 6
+          pieces: {
+            'p1': [
+              GameService.homePathBaseIndexP1 + 3, // Piece 0: Needs 3 to go home, cannot move.
+              10,                                  // Piece 1: Can move to 16 (no capture)
+              -1,                                  // Piece 2: Can go out of base
+              20                                   // Piece 3: Regular move (20 -> 26)
+            ],
+            'p2': [18, -1, -1, -1] // p2_piece0 at 18 (not reachable for capture)
+          },
+        );
+        final aiMove = gameService.makeAIMove(state);
+        expect(aiMove, isNotNull);
+        expect(aiMove!.pieceIndex, 2, reason: "AI should prioritize OUTOFBASE.");
+        expect(aiMove.isMoveOutOfBase, isTrue);
+      });
+
+      test('Complex: Home > Capture > OutOfBase > Furthest. Scenario: Only Regular move available.', () {
+        final state = createAIMoveTestState(
+          currentTurnPlayerId: 'p1',
+          diceRoll: 3, // Dice roll is 3
+          pieces: {
+            'p1': [
+              GameService.homePathBaseIndexP1 + 2, // Piece 0: Needs 4 to go home, cannot move
+              1,                                   // Piece 1: Can move to 4 (Regular furthest)
+              5,                                   // Piece 2: Can move to 8 (Regular)
+              GameService.homeIndexP1             // Piece 3: Already home
+            ],
+            'p2': [15, -1, -1, -1] // p2_piece0 at 15 (not reachable for capture)
+          },
+        );
+        // AI logic should pick piece 2 (at pos 5) to move to 8, as it's "further" than piece 1 (at pos 1)
+        // according to the current _getFurthestPieceMove logic if it iterates from end of pieces list.
+        // Let's be more specific: piece at 5 is "further" along the board in terms of progress.
+        // The AI's "furthest" logic is: `(b.currentPosition > a.currentPosition) ? b : a;` for pieces not in base.
+        // So, 5 is greater than 1.
+        final aiMove = gameService.makeAIMove(state);
+        expect(aiMove, isNotNull);
+        expect(aiMove!.pieceIndex, 2, reason: "AI should prioritize FURTHEST regular move (piece at pos 5).");
+        expect(aiMove.newPosition, 8);
+      });
+
     });
   });
 }
