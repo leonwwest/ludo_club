@@ -10,6 +10,51 @@ class Player {
   // 99: im Ziel (finished)
   Player(this.id, this.name, {List<int>? initialPositions, this.isAI = false})
       : tokenPositions = initialPositions ?? List.filled(GameState.tokensPerPlayer, GameState.basePosition);
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'tokenPositions': tokenPositions,
+      'isAI': isAI,
+    };
+  }
+
+  factory Player.fromJson(Map<String, dynamic> json) {
+    return Player(
+      json['id'] as String,
+      json['name'] as String,
+      initialPositions: List<int>.from(json['tokenPositions'] as List),
+      isAI: json['isAI'] as bool,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Player &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          isAI == other.isAI &&
+          _listEquals(tokenPositions, other.tokenPositions);
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      name.hashCode ^
+      isAI.hashCode ^
+      tokenPositions.fold(0, (prev, item) => prev ^ item.hashCode);
+
+  // Helper for list equality
+  bool _listEquals<T>(List<T>? a, List<T>? b) {
+    if (a == null) return b == null;
+    if (b == null || a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 }
 
 class GameState {
@@ -19,6 +64,7 @@ class GameState {
   int? lastDiceValue;
   int currentRollCount;
   String? winnerId; // ID des Spielers, der gewonnen hat (null wenn Spiel läuft)
+  String? gameId; // Unique ID for the game instance, useful for save slots
 
   static const int tokensPerPlayer = 4;
   static const int basePosition = -1; // Figur in der Basis
@@ -33,7 +79,34 @@ class GameState {
     this.lastDiceValue,
     this.currentRollCount = 0,
     this.winnerId,
+    this.gameId,
   });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'startIndex': startIndex,
+      'players': players.map((p) => p.toJson()).toList(),
+      'currentTurnPlayerId': currentTurnPlayerId,
+      'lastDiceValue': lastDiceValue,
+      'currentRollCount': currentRollCount,
+      'winnerId': winnerId,
+      'gameId': gameId,
+    };
+  }
+
+  factory GameState.fromJson(Map<String, dynamic> json) {
+    return GameState(
+      startIndex: Map<String, int>.from(json['startIndex'] as Map),
+      players: (json['players'] as List<dynamic>)
+          .map((playerJson) => Player.fromJson(playerJson as Map<String, dynamic>))
+          .toList(),
+      currentTurnPlayerId: json['currentTurnPlayerId'] as String,
+      lastDiceValue: json['lastDiceValue'] as int?,
+      currentRollCount: json['currentRollCount'] as int,
+      winnerId: json['winnerId'] as String?,
+      gameId: json['gameId'] as String?,
+    );
+  }
 
   /// Prüft, ob das Feld eine Safe Zone für den Spieler ist.
   bool isSafeField(int boardIndex, String playerId) {
@@ -79,6 +152,58 @@ class GameState {
       lastDiceValue: lastDiceValue,
       currentRollCount: currentRollCount,
       winnerId: winnerId,
+      gameId: gameId,
     );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GameState &&
+          runtimeType == other.runtimeType &&
+          mapEquals(startIndex, other.startIndex) &&
+          listEquals(players, other.players) &&
+          currentTurnPlayerId == other.currentTurnPlayerId &&
+          lastDiceValue == other.lastDiceValue &&
+          currentRollCount == other.currentRollCount &&
+          winnerId == other.winnerId &&
+          gameId == other.gameId;
+          // Note: hashCode needs to be consistent with this.
+
+  @override
+  int get hashCode =>
+      mapHashCode(startIndex) ^
+      players.fold(0, (prev, player) => prev ^ player.hashCode) ^
+      currentTurnPlayerId.hashCode ^
+      lastDiceValue.hashCode ^
+      currentRollCount.hashCode ^
+      winnerId.hashCode ^
+      gameId.hashCode;
+
+  // Helper for map equality
+  bool mapEquals<K, V>(Map<K, V>? a, Map<K, V>? b) {
+    if (a == null) return b == null;
+    if (b == null || a.length != b.length) return false;
+    for (final k in a.keys) {
+      if (!b.containsKey(k) || a[k] != b[k]) return false;
+    }
+    return true;
+  }
+   // Helper for list equality (already present in Player, but good for standalone GameState too)
+  bool listEquals<T>(List<T>? a, List<T>? b) {
+    if (a == null) return b == null;
+    if (b == null || a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+   // Helper for map hash code
+  int mapHashCode<K,V>(Map<K,V> map) {
+    int hash = 0;
+    map.forEach((key, value) {
+      hash = hash ^ key.hashCode ^ value.hashCode;
+    });
+    return hash;
   }
 }
