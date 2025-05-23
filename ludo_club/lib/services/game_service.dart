@@ -169,26 +169,25 @@ class GameService {
   }
 
   /// Bewegt eine Figur, wendet Safe- und Schlag-Logik an.
-  bool moveToken(String playerId, int tokenIndex, int targetPosition) {
-    if (playerId != state.currentTurnPlayerId) return false;
+  /// Returns the ID of the captured opponent player, or null if no capture.
+  String? moveToken(String playerId, int tokenIndex, int targetPosition) {
+    if (playerId != state.currentTurnPlayerId) return null;
     // Prevent move if it's the third six penalty
     if (_consecutiveSixesCount == 3 && state.lastDiceValue == 6) {
-        // Although rollDice should have ended the turn, this is a safeguard.
-        // _endTurn() would have set lastDiceValue to null, so this path might not be hit often.
-        return false;
+        return null;
     }
 
     final player = state.players.firstWhere((p) => p.id == playerId);
 
     if (!isValidMove(playerId, tokenIndex, targetPosition)) {
-      return false;
+      return null;
     }
 
     final currentPosition = player.tokenPositions[tokenIndex];
-    bool tokenCapturedOpponent = false;
+    String? capturedOpponentId; // Initialize to null
 
     if (currentPosition == GameState.basePosition && targetPosition == state.startIndex[playerId]) {
-      // Normal move out of base. If it was a 6, _consecutiveSixesCount is handled in rollDice.
+      // Normal move out of base.
     }
 
     _setTokenPosition(playerId, tokenIndex, targetPosition);
@@ -199,9 +198,12 @@ class GameService {
           for (int i = 0; i < opponent.tokenPositions.length; i++) {
             if (opponent.tokenPositions[i] == targetPosition) {
               _setTokenPosition(opponent.id, i, GameState.basePosition);
-              tokenCapturedOpponent = true;
+              capturedOpponentId = opponent.id; // Store opponent's ID
+              _bonusTurnAwarded = true; // Capture grants a bonus turn
+              break; // Found a captured pawn, no need to check further for this moving token
             }
           }
+          if (capturedOpponentId != null) break; // Exit outer loop if capture found
         }
       }
     }
@@ -212,18 +214,17 @@ class GameService {
       if (hasWon) {
         state.winnerId = player.id;
       }
-    } else if (tokenCapturedOpponent) {
-      _bonusTurnAwarded = true;
-    }
+    } 
+    // Note: if a capture occurred, _bonusTurnAwarded is already true.
+    // else if (tokenCapturedOpponent) was here before, now handled by capturedOpponentId != null check for bonus.
 
     if (_bonusTurnAwarded) {
       state.currentRollCount = 0; 
       state.lastDiceValue = null;
-      _consecutiveSixesCount = 0; // Crucial: Bonus turn resets consecutive sixes sequence.
+      _consecutiveSixesCount = 0; 
     }
-    // The decision to end the turn or continue (e.g. after a 6) is handled by rollDice()
-    // based on _bonusTurnAwarded, _consecutiveSixesCount, and the dice value.
-    return tokenCapturedOpponent; // Return whether a capture occurred
+    
+    return capturedOpponentId;
   }
 
   void _setTokenPosition(String playerId, int tokenIndex, int pos) {
