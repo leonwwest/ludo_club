@@ -36,20 +36,24 @@ class GameState {
   });
 
   /// Prüft, ob das Feld eine Safe Zone für den Spieler ist.
-  // Diese Methode muss überarbeitet werden, da Safe Zones relativ zum Startpunkt sind
-  // und es auch Startfelder gibt, die sicher sind.
   bool isSafeField(int boardIndex, String playerId) {
+    // A player's own starting square is safe.
     final playerStart = startIndex[playerId]!;
-    // Das eigentliche Startfeld des Spielers (nach dem Rauskommen) ist sicher.
     if (boardIndex == playerStart) return true;
-    
-    // Die allgemeinen sicheren Felder, die oft farbig markiert sind (jedes 8. Feld vom Start des Spielers)
-    // Diese Logik ist vereinfacht und muss ggf. an das genaue Ludo-Brett angepasst werden.
-    // Typischerweise gibt es 8 sichere Felder auf dem Brett.
-    // Beispiel: Wenn Start bei 0, dann 0, 8, 13 (Start anderer Spieler), 21, 26 (Start anderer Spieler), 34, 39 (Start anderer Spieler)
-    // Dies ist eine sehr spezifische Regel, die vom Brett abhängt. Fürs Erste nehmen wir nur das Startfeld.
-    // Weitere sichere Felder könnten hier hinzugefügt werden.
-    return false; 
+
+    // Standard shared safe spots.
+    // These include all player start fields and fields 8 positions clockwise from each start.
+    // Assuming start indices are 0, 10, 20, 30 for a 40-field board.
+    const sharedSafeSpots = [
+      0, 10, 20, 30, // Start fields
+      8, 18, 28, 38  // 8 spaces clockwise from each start field
+    ];
+
+    if (sharedSafeSpots.contains(boardIndex)) {
+      return true;
+    }
+
+    return false;
   }
   
   /// Gibt den aktuellen Spieler zurück

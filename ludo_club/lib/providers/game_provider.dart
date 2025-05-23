@@ -9,8 +9,21 @@ class GameProvider extends ChangeNotifier {
   GameService _gameService;
   final SaveLoadService _saveLoadService = SaveLoadService();
   final AudioService _audioService = AudioService();
-  bool _isAnimating = false;
-  
+  bool _isAnimating = false; // For pawn movement animation primarily
+
+  // Capture effect state
+  bool _showCaptureEffect = false;
+  int? _captureEffectBoardIndex;
+  // Color? _capturedPawnColor; // Optional: for coloring the effect like the captured pawn
+
+  // Reached Home effect state
+  bool _showReachedHomeEffect = false;
+  String? _reachedHomePlayerId;
+  int? _reachedHomeTokenIndex;
+
+  // AI Thinking state
+  bool _isAiThinking = false;
+
   GameProvider(this._gameState) : _gameService = GameService(_gameState) {
     _initAudio();
   }
@@ -21,8 +34,40 @@ class GameProvider extends ChangeNotifier {
   }
   
   GameState get gameState => _gameState;
-  bool get isAnimating => _isAnimating;
+  bool get isAnimating => _isAnimating; // For pawn movement
+
+  // Getters for capture effect
+  bool get showCaptureEffect => _showCaptureEffect;
+  int? get captureEffectBoardIndex => _captureEffectBoardIndex;
+  // Color? get capturedPawnColor => _capturedPawnColor; // Optional
+
+  // Getters for Reached Home effect
+  bool get showReachedHomeEffect => _showReachedHomeEffect;
+  String? get reachedHomePlayerId => _reachedHomePlayerId;
+  int? get reachedHomeTokenIndex => _reachedHomeTokenIndex;
+
+  // Getter for AI Thinking state
+  bool get isAiThinking => _isAiThinking;
+
+  /// Clears capture effect flags. Called by UI after animation.
+  void clearCaptureEffect() {
+    _showCaptureEffect = false;
+    _captureEffectBoardIndex = null;
+    // _capturedPawnColor = null;
+  }
+
+  /// Clears reached home effect flags. Called by UI after animation.
+  void clearReachedHomeEffect() {
+    _showReachedHomeEffect = false;
+    _reachedHomePlayerId = null;
+    _reachedHomeTokenIndex = null;
+  }
   
+  set isAnimating(bool value) { // Setter for GameScreen to control general animation blocking
+    _isAnimating = value;
+    // notifyListeners(); // Avoid notifying if this is set frequently during animation setup
+  }
+
   /// Würfelt und aktualisiert den Spielzustand
   Future<int> rollDice() async {
     if (_isAnimating) return 0;
@@ -42,8 +87,15 @@ class GameProvider extends ChangeNotifier {
     
     // Wenn der aktuelle Spieler eine KI ist, automatischen Zug ausführen
     if (_gameState.isCurrentPlayerAI) {
-      await Future.delayed(const Duration(milliseconds: 500));
+      _isAiThinking = true;
+      notifyListeners(); // Update UI to show AI is thinking
+
+      await Future.delayed(const Duration(milliseconds: 500)); // Simulate AI thinking time
       _gameService.makeAIMove();
+      
+      _isAiThinking = false;
+      // The notifyListeners() below will update the UI after AI move is done
+      // and thinking indicator should be gone.
       notifyListeners();
     }
     
@@ -58,53 +110,47 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
     
     // Bewegungsanimation simulieren
-    await Future.delayed(const Duration(milliseconds: 500));
+    // The actual pawn movement animation is handled in GameScreen.
+    // This delay was for a simulated non-visual movement.
+    // await Future.delayed(const Duration(milliseconds: 500)); // Keep or remove based on desired pacing
     
-    final currentPlayer = _gameState.currentPlayer;
-    final currentPosition = currentPlayer.tokenPositions[tokenIndex];
+    // final currentPlayer = _gameState.currentPlayer; // Not needed here for capture logic
+    // final currentPosition = currentPlayer.tokenPositions[tokenIndex]; // Not needed for capture logic
     
-    final result = _gameService.moveToken(_gameState.currentTurnPlayerId, tokenIndex, targetPosition);
+    // `result` is true if a capture occurred
+    final bool captureOccurred = _gameService.moveToken(_gameState.currentTurnPlayerId, tokenIndex, targetPosition);
     
-    if (result) {
-      // Verschiedene Sounds basierend auf der Art des Zuges
-      if (targetPosition == GameState.finishedPosition) {
-        // Figur hat das Ziel erreicht
-        await _audioService.playFinishSound();
-        
-        // Wenn Spieler gewonnen hat
-        if (_gameState.winner != null) {
-          await _audioService.playVictorySound();
-        }
-      } else {
-        // Prüfe, ob eine gegnerische Figur geschlagen wurde
-        bool hasCapture = false;
-        for (var player in _gameState.players) {
-          if (player.id != currentPlayer.id) {
-            for (int i = 0; i < player.tokenPositions.length; i++) {
-              if (player.tokenPositions[i] == GameState.basePosition &&
-                  player.tokenPositions[i] != currentPosition) {
-                hasCapture = true;
-                break;
-              }
-            }
-          }
-          if (hasCapture) break;
-        }
-        
-        if (hasCapture) {
-          // Gegnerische Figur geschlagen
-          await _audioService.playCaptureSound();
-        } else {
-          // Normale Bewegung
-          await _audioService.playMoveSound();
-        }
+    // Sound logic & Effect Triggers
+    if (targetPosition == GameState.finishedPosition) {
+      await _audioService.playFinishSound();
+      // Set flags for visual "reached home" effect
+      _showReachedHomeEffect = true;
+      _reachedHomePlayerId = _gameState.currentTurnPlayerId; // Player who made the move
+      _reachedHomeTokenIndex = tokenIndex;                 // Token that reached home
+
+      if (_gameState.winner != null) {
+        await _audioService.playVictorySound();
       }
+    } else if (captureOccurred) {
+      await _audioService.playCaptureSound();
+      // Set flags for visual capture effect
+      _showCaptureEffect = true;
+      _captureEffectBoardIndex = targetPosition;
+    } else {
+      // Normal move, no capture, not reaching finish
+      await _audioService.playMoveSound();
     }
     
-    _isAnimating = false;
-    notifyListeners();
+    // _isAnimating is set to false by GameScreen's pawn animation completion.
+    // If moveToken is called directly without pawn animation (e.g. very fast AI),
+    // then _isAnimating might need to be managed here too.
+    // However, the current structure has GameScreen manage _isAnimating for pawn moves.
+    // If no pawn animation, then this method should manage _isAnimating.
+    // For now, assuming pawn animation in GameScreen handles this.
+    // If called from GameScreen animation end, _isAnimating is already false there.
+    notifyListeners(); // Inform UI about game state changes and potential capture effect
     
-    return result;
+    return captureOccurred; // Return capture status
   }
   
   /// Gibt mögliche Züge für den aktuellen Spieler zurück
