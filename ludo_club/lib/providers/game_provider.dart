@@ -3,14 +3,29 @@ import '../models/game_state.dart';
 import '../services/game_service.dart';
 import '../services/save_load_service.dart';
 import '../services/audio_service.dart';
+import '../services/statistics_service.dart'; // Import StatisticsService
 
 class GameProvider extends ChangeNotifier {
   GameState _gameState;
   GameService _gameService;
   final SaveLoadService _saveLoadService = SaveLoadService();
   final AudioService _audioService = AudioService();
-  bool _isAnimating = false;
-  
+  final StatisticsService _statisticsService = StatisticsService(); // Add StatisticsService instance
+  bool _isAnimating = false; // For pawn movement animation primarily
+
+  // Capture effect state
+  bool _showCaptureEffect = false;
+  int? _captureEffectBoardIndex;
+  // Color? _capturedPawnColor; // Optional: for coloring the effect like the captured pawn
+
+  // Reached Home effect state
+  bool _showReachedHomeEffect = false;
+  String? _reachedHomePlayerId;
+  int? _reachedHomeTokenIndex;
+
+  // AI Thinking state
+  bool _isAiThinking = false;
+
   GameProvider(this._gameState) : _gameService = GameService(_gameState) {
     _initAudio();
   }
@@ -21,8 +36,40 @@ class GameProvider extends ChangeNotifier {
   }
   
   GameState get gameState => _gameState;
-  bool get isAnimating => _isAnimating;
+  bool get isAnimating => _isAnimating; // For pawn movement
+
+  // Getters for capture effect
+  bool get showCaptureEffect => _showCaptureEffect;
+  int? get captureEffectBoardIndex => _captureEffectBoardIndex;
+  // Color? get capturedPawnColor => _capturedPawnColor; // Optional
+
+  // Getters for Reached Home effect
+  bool get showReachedHomeEffect => _showReachedHomeEffect;
+  String? get reachedHomePlayerId => _reachedHomePlayerId;
+  int? get reachedHomeTokenIndex => _reachedHomeTokenIndex;
+
+  // Getter for AI Thinking state
+  bool get isAiThinking => _isAiThinking;
+
+  /// Clears capture effect flags. Called by UI after animation.
+  void clearCaptureEffect() {
+    _showCaptureEffect = false;
+    _captureEffectBoardIndex = null;
+    // _capturedPawnColor = null;
+  }
+
+  /// Clears reached home effect flags. Called by UI after animation.
+  void clearReachedHomeEffect() {
+    _showReachedHomeEffect = false;
+    _reachedHomePlayerId = null;
+    _reachedHomeTokenIndex = null;
+  }
   
+  set isAnimating(bool value) { // Setter for GameScreen to control general animation blocking
+    _isAnimating = value;
+    // notifyListeners(); // Avoid notifying if this is set frequently during animation setup
+  }
+
   /// Würfelt und aktualisiert den Spielzustand
   Future<int> rollDice() async {
     if (_isAnimating) return 0;
@@ -38,73 +85,69 @@ class GameProvider extends ChangeNotifier {
     
     final result = _gameService.rollDice();
     _isAnimating = false;
+    
+    if (result == 6) {
+      await _statisticsService.incrementSixesRolled(_gameState.currentPlayer.name);
+    }
     notifyListeners();
     
     // Wenn der aktuelle Spieler eine KI ist, automatischen Zug ausführen
     if (_gameState.isCurrentPlayerAI) {
-      await Future.delayed(const Duration(milliseconds: 500));
+      _isAiThinking = true;
+      notifyListeners(); // Update UI to show AI is thinking
+
+      await Future.delayed(const Duration(milliseconds: 500)); // Simulate AI thinking time
       _gameService.makeAIMove();
+      
+      _isAiThinking = false;
       notifyListeners();
     }
     
     return result;
   }
   
-  /// Bewegt eine Spielfigur
-  Future<bool> moveToken(int tokenIndex, int targetPosition) async {
-    if (_isAnimating) return false;
+  /// Bewegt eine Spielfigur und aktualisiert Statistiken
+  Future<void> moveToken(int tokenIndex, int targetPosition) async {
+    if (_isAnimating) return;
     
     _isAnimating = true;
-    notifyListeners();
+    // notifyListeners(); // Notifying immediately might be too early if isAnimating is used to block UI before animation setup.
+                        // GameScreen sets isAnimating true again in _initiatePawnAnimation.
+
+    final String currentPlayerId = _gameState.currentTurnPlayerId;
+    final String currentPlayerName = _gameState.currentPlayer.name;
+
+    // `capturedOpponentId` is the ID of the player whose pawn was captured, or null.
+    final String? capturedOpponentId = _gameService.moveToken(currentPlayerId, tokenIndex, targetPosition);
     
-    // Bewegungsanimation simulieren
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    final currentPlayer = _gameState.currentPlayer;
-    final currentPosition = currentPlayer.tokenPositions[tokenIndex];
-    
-    final result = _gameService.moveToken(_gameState.currentTurnPlayerId, tokenIndex, targetPosition);
-    
-    if (result) {
-      // Verschiedene Sounds basierend auf der Art des Zuges
-      if (targetPosition == GameState.finishedPosition) {
-        // Figur hat das Ziel erreicht
-        await _audioService.playFinishSound();
-        
-        // Wenn Spieler gewonnen hat
-        if (_gameState.winner != null) {
-          await _audioService.playVictorySound();
-        }
-      } else {
-        // Prüfe, ob eine gegnerische Figur geschlagen wurde
-        bool hasCapture = false;
-        for (var player in _gameState.players) {
-          if (player.id != currentPlayer.id) {
-            for (int i = 0; i < player.tokenPositions.length; i++) {
-              if (player.tokenPositions[i] == GameState.basePosition &&
-                  player.tokenPositions[i] != currentPosition) {
-                hasCapture = true;
-                break;
-              }
-            }
-          }
-          if (hasCapture) break;
-        }
-        
-        if (hasCapture) {
-          // Gegnerische Figur geschlagen
-          await _audioService.playCaptureSound();
-        } else {
-          // Normale Bewegung
-          await _audioService.playMoveSound();
-        }
+    // Sound logic & Effect Triggers & Statistics
+    if (targetPosition == GameState.finishedPosition) {
+      await _audioService.playFinishSound();
+      _showReachedHomeEffect = true;
+      _reachedHomePlayerId = currentPlayerId;
+      _reachedHomeTokenIndex = tokenIndex;
+
+      if (_gameState.winnerId != null && _gameState.winnerId == currentPlayerId) {
+        await _audioService.playVictorySound();
+        await _statisticsService.incrementGamesWon(currentPlayerName);
       }
+    } else if (capturedOpponentId != null) {
+      await _audioService.playCaptureSound();
+      _showCaptureEffect = true;
+      _captureEffectBoardIndex = targetPosition;
+      
+      await _statisticsService.incrementPawnsCaptured(currentPlayerName);
+      // Need to find the name of the captured opponent.
+      final capturedPlayer = _gameState.players.firstWhere((p) => p.id == capturedOpponentId, orElse: () => Player("unknown","Unknown"));
+      if (capturedPlayer.id != "unknown") { // Ensure player was found
+           await _statisticsService.incrementPawnsLost(capturedPlayer.name);
+      }
+    } else {
+      await _audioService.playMoveSound();
     }
     
-    _isAnimating = false;
+    // _isAnimating is set to false by GameScreen's pawn animation completion.
     notifyListeners();
-    
-    return result;
   }
   
   /// Gibt mögliche Züge für den aktuellen Spieler zurück
@@ -138,10 +181,10 @@ class GameProvider extends ChangeNotifier {
   /// Startet ein neues Spiel mit den angegebenen Spielern
   void startNewGame(List<Player> players) {
     final startIndices = <String, int>{
-      'player1': 0,   // Gelb (oben)
-      'player2': 10,  // Blau (rechts)
-      'player3': 20,  // Grün (unten)
-      'player4': 30,  // Rot (links)
+      'player1': 0,
+      'player2': 10,
+      'player3': 20,
+      'player4': 30,
     };
     
     // Setze die Startpositionen der Spieler auf ihre Heimatfelder
@@ -153,10 +196,17 @@ class GameProvider extends ChangeNotifier {
       startIndex: startIndices,
       players: players,
       currentTurnPlayerId: players.first.id,
-      winnerId: null, // Kein Gewinner bei Spielstart
+      winnerId: null,
     );
     
     _gameService = GameService(_gameState);
+
+    // Record game played for all players
+    final playerNames = players.map((p) => p.name).toList();
+    _statisticsService.recordGamePlayed(playerNames).catchError((e) {
+        print("Error recording game played stats: $e");
+    }); // Log error, don't block UI
+
     notifyListeners();
   }
 

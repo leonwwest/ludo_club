@@ -3,42 +3,75 @@ import '../models/game_state.dart';
 
 class GameService {
   final GameState state;
-  final Random _rng = Random();
+  final Random _rng; // Made non-final to allow potential reassignment for advanced mocking if ever needed
+  bool _bonusTurnAwarded = false;
+  int _consecutiveSixesCount = 0;
+  int? debugNextDiceValue; // Public field for testing
 
-  GameService(this.state);
+  GameService(this.state, [Random? random]) : _rng = random ?? Random();
 
   /// Würfelt und steuert die Turn-Logik (max. 3 Würfe bei 6).
   int rollDice() {
-    // Bei mehr als 3 Würfen wechselt der Spieler
-    if (state.currentRollCount >= 3) {
+    if (_bonusTurnAwarded) {
+      _bonusTurnAwarded = false; 
+      state.currentRollCount = 0; // Bereits in moveToken, aber zur Sicherheit hier auch für den Wurfablauf
+      _consecutiveSixesCount = 0; // Bonus turn resets consecutive sixes count
+    } else if (state.currentRollCount >= 3 && state.lastDiceValue != 6 && _consecutiveSixesCount < 3) {
+      // This condition handles the case where a player has had 3 or more rolls in their turn sequence,
+      // and the last roll was NOT a 6. This means their turn should end if they are not on a 6-rolling streak.
+      // If _consecutiveSixesCount is 3, that's handled specifically below.
       _endTurn();
-      return 0;
+      return 0; 
     }
-    
-    final value = _rng.nextInt(6) + 1;
-    state.lastDiceValue = value;
-    state.currentRollCount++;
 
-    // Nur zum nächsten Spieler wechseln wenn:
-    // 1. Keine 6 gewürfelt wurde ODER
-    // 2. Wir bereits zum dritten Mal gewürfelt haben
-    if (value != 6 || state.currentRollCount >= 3) {
-      // Prüfe zuerst, ob der Spieler mit diesem Würfelwert überhaupt ziehen kann
+    final value = debugNextDiceValue ?? _rng.nextInt(6) + 1;
+    if (debugNextDiceValue != null) {
+      debugNextDiceValue = null; // Reset after use
+    }
+    state.lastDiceValue = value;
+    // state.currentRollCount is incremented by general turn logic, not specifically for sixes.
+    // Let's use _consecutiveSixesCount for specific 6-related logic.
+    // state.currentRollCount will track total rolls in a turn if multiple 6s are rolled OR a bonus is awarded.
+
+    if (value == 6) {
+      _consecutiveSixesCount++;
+      state.currentRollCount++; // A roll happened
+      if (_consecutiveSixesCount == 3) {
+        // Third consecutive 6. Turn ends, no move for this 6.
+        _endTurn(); // This will reset _consecutiveSixesCount and currentRollCount
+        return value; // Return 6, but turn has ended. getPossibleMoveDetails will be empty.
+      }
+      // Not the third six, player continues. currentRollCount is already incremented.
+      // No call to _endTurn() here. Player gets another roll implicitly.
+    } else {
+      _consecutiveSixesCount = 0; // Reset if not a 6
+      state.currentRollCount++;   // A roll happened
+
+      // Standard turn ending condition if not a 6:
+      // (No specific bonus from this roll itself, e.g. capture/home, that's handled by _bonusTurnAwarded from moveToken)
       final possibleMoves = getPossibleMoveDetails();
       if (possibleMoves.isEmpty) {
+        _endTurn();
+      } else {
+        // If moves are possible, but it's not a 6, the turn ends.
+        // (The "roll again on 6" is handled by *not* calling _endTurn above if value is 6 and not 3rd six)
         _endTurn();
       }
     }
     
+    // If _endTurn() was called, state.lastDiceValue will be null.
+    // If the turn continues (due to 1st/2nd six), state.lastDiceValue is the current 'value'.
     return value;
   }
 
   void _endTurn() {
     state.currentRollCount = 0;
-    state.lastDiceValue = null;
+    _consecutiveSixesCount = 0; // Reset for the next player
+    state.lastDiceValue = null; 
     final idx = state.players.indexWhere((p) => p.id == state.currentTurnPlayerId);
     final next = (idx + 1) % state.players.length;
     state.currentTurnPlayerId = state.players[next].id;
+    _bonusTurnAwarded = false; 
   }
 
   /// Gibt mögliche Züge mit Token-Index und Zielposition zurück
@@ -75,40 +108,39 @@ class GameService {
       
       // Figur ist auf dem Hauptspielfeld
       if (currentPos < GameState.totalFields) {
-        // Berechne nächste Position auf dem Hauptspielfeld
-        int nextPos = (currentPos + diceValue) % GameState.totalFields;
-        
-        // Prüfe, ob Figur in den Heimweg einbiegen soll
         int playerStartField = state.startIndex[currentPlayer.id]!;
-        int distanceFromStart = (currentPos - playerStartField + GameState.totalFields) % GameState.totalFields;
-        int distanceAfterMove = (distanceFromStart + diceValue) % GameState.totalFields;
-        
-        // Wenn die Figur eine volle Runde gedreht hat und am eigenen Startfeld vorbeikommt
-        if (distanceFromStart < GameState.totalFields - diceValue && distanceAfterMove >= GameState.totalFields - diceValue) {
-          // Figur biegt in den Heimweg ein
-          int homePathPosition = GameState.totalFields + (diceValue - (GameState.totalFields - distanceFromStart) - 1);
-          if (homePathPosition < GameState.totalFields + GameState.homePathLength) {
-            nextPos = homePathPosition;
-          }
+        int stepsTakenOnBoard = (currentPos - playerStartField + GameState.totalFields) % GameState.totalFields;
+
+        if (stepsTakenOnBoard + diceValue >= GameState.totalFields) {
+            // Token is eligible to enter the home path
+            int stepsIntoHomePath = (stepsTakenOnBoard + diceValue) - GameState.totalFields;
+
+            if (stepsIntoHomePath < GameState.homePathLength) {
+                targetPos = GameState.totalFields + stepsIntoHomePath; // e.g., 40, 41, 42, 43
+            } else {
+                // Overshot the home path, invalid move for this token
+                continue; 
+            }
+        } else {
+            // Stays on main board
+            targetPos = (currentPos + diceValue) % GameState.totalFields;
         }
-        
-        targetPos = nextPos;
-      } 
+      }
       // Figur ist auf dem Heimweg
-      else if (currentPos < GameState.totalFields + GameState.homePathLength) {
-        // Berechne nächste Position auf dem Heimweg
-        int homePos = currentPos + diceValue;
+      else if (currentPos >= GameState.totalFields && currentPos < GameState.totalFields + GameState.homePathLength) {
+        // currentPos is already like 40, 41, 42, 43
+        // diceValue is, e.g., 1, 2, 3, 4, 5, 6
         
-        // Prüfe, ob die Figur das Ziel erreicht
-        if (homePos == GameState.totalFields + GameState.homePathLength - 1 + diceValue) {
-          targetPos = GameState.finishedPosition;
-        } 
-        // Prüfe, ob die Figur über das Ziel hinausschießt (ungültiger Zug)
-        else if (homePos >= GameState.totalFields + GameState.homePathLength) {
-          continue;
-        } 
-        else {
-          targetPos = homePos;
+        // Position within the home path (0, 1, 2, 3)
+        int currentHomePathSlot = currentPos - GameState.totalFields;
+        int targetHomePathSlot = currentHomePathSlot + diceValue;
+
+        if (targetHomePathSlot == GameState.homePathLength) { // Exact landing on finish spot
+             targetPos = GameState.finishedPosition;
+        } else if (targetHomePathSlot < GameState.homePathLength) { // Moves within home path
+            targetPos = GameState.totalFields + targetHomePathSlot;
+        } else { // Overshot finish
+            continue; // Invalid move
         }
       }
       else {
@@ -137,68 +169,62 @@ class GameService {
   }
 
   /// Bewegt eine Figur, wendet Safe- und Schlag-Logik an.
-  bool moveToken(String playerId, int tokenIndex, int targetPosition) {
-    if (playerId != state.currentTurnPlayerId) return false;
-    
+  /// Returns the ID of the captured opponent player, or null if no capture.
+  String? moveToken(String playerId, int tokenIndex, int targetPosition) {
+    if (playerId != state.currentTurnPlayerId) return null;
+    // Prevent move if it's the third six penalty
+    if (_consecutiveSixesCount == 3 && state.lastDiceValue == 6) {
+        return null;
+    }
+
     final player = state.players.firstWhere((p) => p.id == playerId);
-    
-    // Prüfen, ob der Zug gültig ist
+
     if (!isValidMove(playerId, tokenIndex, targetPosition)) {
-      return false;
+      return null;
     }
-    
-    // Aktuelle Position der Figur
+
     final currentPosition = player.tokenPositions[tokenIndex];
-    
-    // Wenn Figur auf das Hauptspielfeld kommt
+    String? capturedOpponentId; // Initialize to null
+
     if (currentPosition == GameState.basePosition && targetPosition == state.startIndex[playerId]) {
-      _setTokenPosition(playerId, tokenIndex, targetPosition);
-      
-      // Wenn eine 6 gewürfelt wurde und eine Figur aus der Basis geholt wird,
-      // darf der Spieler nochmal würfeln, daher keinen Spielerwechsel
-      // ist bereits in rollDice() berücksichtigt
-      return true;
+      // Normal move out of base.
     }
-    
-    // Wenn die Figur ins Ziel kommt
-    if (targetPosition == GameState.finishedPosition) {
-      _setTokenPosition(playerId, tokenIndex, targetPosition);
-      
-      // Prüfe, ob der Spieler gewonnen hat (alle Figuren im Ziel)
-      bool hasWon = player.tokenPositions.every((pos) => pos == GameState.finishedPosition);
-      if (hasWon) {
-        // Spielgewinn-Logik hier implementieren
-        state.winnerId = player.id;
-      }
-      
-      // Nach einem Zug ins Ziel darf der Spieler nochmal würfeln (Bonus-Regel)
-      // Alternativ: _endTurn(); // Falls diese Regel nicht gewünscht ist
-      return true;
-    }
-    
-    // Wenn targetPosition auf dem Hauptspielfeld ist, prüfe auf gegnerische Figuren
-    if (targetPosition < GameState.totalFields) {
+
+    _setTokenPosition(playerId, tokenIndex, targetPosition);
+
+    if (targetPosition < GameState.totalFields && targetPosition != GameState.basePosition) {
       if (!state.isSafeField(targetPosition, playerId)) {
-        // Suche nach gegnerischen Figuren auf der Zielposition
         for (var opponent in state.players.where((p) => p.id != playerId)) {
           for (int i = 0; i < opponent.tokenPositions.length; i++) {
             if (opponent.tokenPositions[i] == targetPosition) {
-              // Gegnerische Figur zurück zur Basis schicken
               _setTokenPosition(opponent.id, i, GameState.basePosition);
+              capturedOpponentId = opponent.id; // Store opponent's ID
+              _bonusTurnAwarded = true; // Capture grants a bonus turn
+              break; // Found a captured pawn, no need to check further for this moving token
             }
           }
+          if (capturedOpponentId != null) break; // Exit outer loop if capture found
         }
       }
     }
     
-    // Figur bewegen
-    _setTokenPosition(playerId, tokenIndex, targetPosition);
+    if (targetPosition == GameState.finishedPosition) {
+      _bonusTurnAwarded = true;
+      bool hasWon = player.tokenPositions.every((pos) => pos == GameState.finishedPosition);
+      if (hasWon) {
+        state.winnerId = player.id;
+      }
+    } 
+    // Note: if a capture occurred, _bonusTurnAwarded is already true.
+    // else if (tokenCapturedOpponent) was here before, now handled by capturedOpponentId != null check for bonus.
+
+    if (_bonusTurnAwarded) {
+      state.currentRollCount = 0; 
+      state.lastDiceValue = null;
+      _consecutiveSixesCount = 0; 
+    }
     
-    // Falls keine 6 gewürfelt wurde, ist der nächste Spieler dran
-    // Oder falls es der dritte Wurf war
-    // Diese Logik ist bereits in rollDice() implementiert
-    
-    return true;
+    return capturedOpponentId;
   }
 
   void _setTokenPosition(String playerId, int tokenIndex, int pos) {
@@ -217,71 +243,106 @@ class GameService {
   
   /// KI-Logik für automatische Züge
   void makeAIMove() {
-    if (!state.isCurrentPlayerAI) return;
-    
-    // Würfeln
-    final diceValue = rollDice();
-    
-    // Wenn kein Würfelwert mehr vorhanden ist (z.B. nach _endTurn), beenden
-    if (state.lastDiceValue == null) {
-      rollDice();
-    }
-    
-    // Mögliche Züge ermitteln
-    final moves = getPossibleMoveDetails();
-    if (moves.isEmpty) {
-      _endTurn();
-      return;
-    }
-    
-    // Einfache KI-Strategie: Priorität der Züge
-    // 1. Figur ins Ziel bringen
-    // 2. Gegnerische Figur schlagen
-    // 3. Figur aus der Basis herausbringen
-    // 4. Figur auf dem Hauptspielfeld vorwärts bewegen
-    
-    // Suche einen Zug, der eine Figur ins Ziel bringt
-    for (var move in moves) {
-      if (move['targetPosition'] == GameState.finishedPosition) {
-        moveToken(state.currentTurnPlayerId, move['tokenIndex']!, move['targetPosition']!);
-        return;
+    if (!state.isCurrentPlayerAI || state.isGameOver) return;
+
+    String aiPlayerId = state.currentTurnPlayerId; // Merken, wer dran ist
+    bool firstIteration = true;
+
+    do {
+      if (!firstIteration) {
+        // Wenn dies nicht die erste Iteration ist (d.h. AI hat einen Bonus-Zug oder eine 6 gewürfelt),
+        // dann muss die AI erneut würfeln.
+        // _bonusTurnAwarded wird in rollDice() konsumiert.
+        // currentRollCount wurde ggf. in moveToken oder durch 6er-Serie in rollDice gehandhabt.
       }
-    }
-    
-    // Suche einen Zug, der eine gegnerische Figur schlägt
-    for (var move in moves) {
-      final targetPos = move['targetPosition']!;
-      if (targetPos < GameState.totalFields && !state.isSafeField(targetPos, state.currentTurnPlayerId)) {
-        bool canHitOpponent = false;
-        
-        for (var opponent in state.players.where((p) => p.id != state.currentTurnPlayerId)) {
-          if (opponent.tokenPositions.any((pos) => pos == targetPos)) {
-            canHitOpponent = true;
-            break;
-          }
-        }
-        
-        if (canHitOpponent) {
-          moveToken(state.currentTurnPlayerId, move['tokenIndex']!, move['targetPosition']!);
-          return;
-        }
-      }
-    }
-    
-    // Suche einen Zug, der eine Figur aus der Basis herausbringt
-    for (var move in moves) {
-      final player = state.currentPlayer;
-      final tokenIndex = move['tokenIndex']!;
+      firstIteration = false;
       
-      if (player.tokenPositions[tokenIndex] == GameState.basePosition) {
-        moveToken(state.currentTurnPlayerId, move['tokenIndex']!, move['targetPosition']!);
-        return;
+      // 1. Würfeln
+      // rollDice() handhabt jetzt _bonusTurnAwarded (konsumiert es, wenn true)
+      // und entscheidet, ob der Zug potenziell endet.
+      rollDice();
+
+      // Wenn lastDiceValue null ist, wurde der Zug in rollDice() beendet (z.B. keine Züge, 3x gewürfelt ohne 6).
+      // Oder currentTurnPlayerId hat sich geändert.
+      if (state.lastDiceValue == null || state.currentTurnPlayerId != aiPlayerId) {
+        break; 
       }
-    }
-    
-    // Fallback: Ersten möglichen Zug ausführen
-    if (moves.isNotEmpty) {
-      moveToken(state.currentTurnPlayerId, moves[0]['tokenIndex']!, moves[0]['targetPosition']!);
-    }
+      
+      // 2. Mögliche Züge ermitteln
+      final possibleMoves = getPossibleMoveDetails();
+      if (possibleMoves.isEmpty) {
+        // Wenn keine Züge möglich sind, hat rollDice() _endTurn() bereits aufgerufen (oder sollte es tun).
+        // Der Zug der KI ist hier definitiv vorbei.
+        if(state.currentTurnPlayerId == aiPlayerId) { // Nur wenn der Zug nicht schon durch rollDice beendet wurde
+             _endTurn(); // Sicherstellen, dass der Zug beendet wird
+        }
+        break;
+      }
+
+      // 3. KI-Strategie für Zugauswahl (bleibt im Wesentlichen gleich)
+      Map<String, int>? chosenMove;
+      // Priorität 1: Figur ins Ziel bringen
+      chosenMove = possibleMoves.firstWhere((move) => move['targetPosition'] == GameState.finishedPosition, orElse: () => {});
+      if (chosenMove.isEmpty) chosenMove = null;
+
+      // Priorität 2: Gegnerische Figur schlagen
+      if (chosenMove == null) {
+        chosenMove = possibleMoves.firstWhere((move) {
+          final targetPos = move['targetPosition']!;
+          if (targetPos < GameState.totalFields && !state.isSafeField(targetPos, aiPlayerId)) {
+            for (var opponent in state.players.where((p) => p.id != aiPlayerId)) {
+              if (opponent.tokenPositions.any((pos) => pos == targetPos)) return true;
+            }
+          }
+          return false;
+        }, orElse: () => {});
+        if (chosenMove.isEmpty) chosenMove = null;
+      }
+      
+      // Priorität 3: Figur aus der Basis herausbringen (nur mit 6, was getPossibleMoveDetails sicherstellt)
+      if (chosenMove == null) {
+         chosenMove = possibleMoves.firstWhere((move) {
+            final player = state.players.firstWhere((p) => p.id == aiPlayerId);
+            return player.tokenPositions[move['tokenIndex']!] == GameState.basePosition;
+         }, orElse: () => {});
+         if (chosenMove.isEmpty) chosenMove = null;
+      }
+
+      // Fallback: Ersten möglichen Zug ausführen
+      chosenMove ??= possibleMoves.first;
+
+      // 4. Zug ausführen
+      moveToken(aiPlayerId, chosenMove['tokenIndex']!, chosenMove['targetPosition']!);
+
+      // 5. Prüfung für Weitermachen:
+      // - _bonusTurnAwarded wurde in moveToken gesetzt (Schlagen/Ziel).
+      // - ODER: Letzter Wurf war eine 6 und currentRollCount < 3 (oder unbegrenzte 6er).
+      //   rollDice() beendet den Zug nicht, wenn eine 6 gewürfelt wurde und currentRollCount < 3.
+      //   Wenn currentRollCount >= 3 ist und eine 6 gewürfelt wurde, geht es auch weiter.
+      //   Die Hauptsache ist, dass _endTurn() nicht aufgerufen wurde.
+
+      // Die Schleife geht weiter, wenn:
+      // a) _bonusTurnAwarded (durch moveToken) -> wird am Anfang von rollDice() konsumiert.
+      // b) state.lastDiceValue == 6 (und Zug wurde nicht durch 3x Würfeln beendet)
+      // c) Der currentTurnPlayerId immer noch die AI ist.
+      
+      // Wenn ein Bonus durch Schlagen/Ziel gewährt wurde, ist _bonusTurnAwarded = true.
+      // Wenn eine 6 gewürfelt wurde, die keinen expliziten Bonus-Reset macht,
+      // dann ist state.lastDiceValue == 6 und state.currentRollCount relevant.
+      // rollDice() wird den Zug nicht beenden, wenn eine 6 gewürfelt wurde (es sei denn, es gibt keine Züge).
+
+      if (state.currentTurnPlayerId != aiPlayerId || state.isGameOver) {
+        // Spieler hat gewechselt (Zug wurde in moveToken oder rollDice beendet) oder Spiel ist vorbei
+        break;
+      }
+      
+      // Wenn wir hier sind, ist die AI immer noch dran.
+      // Wenn _bonusTurnAwarded true ist, wird die Schleife fortgesetzt und rollDice() wird es konsumieren.
+      // Wenn state.lastDiceValue == 6, wird die Schleife fortgesetzt und rollDice() wird einen neuen Wurf erlauben.
+      // Wenn keines von beiden zutrifft, sollte der Zug bereits beendet sein (currentTurnPlayerId hätte sich geändert).
+      // Die Bedingung der do-while Schleife prüft dies.
+
+    } while (state.currentTurnPlayerId == aiPlayerId && !state.isGameOver);
+     _bonusTurnAwarded = false; // Ensure reset if AI loop is exited for other reasons
   }
 }
