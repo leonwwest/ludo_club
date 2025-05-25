@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ludo_club/models/game_state.dart';
-import 'package:ludo_club/models/player.dart';
 
 void main() {
   group('GameState', () {
@@ -25,10 +24,10 @@ void main() {
           players: players,
           currentTurnPlayerId: 'player1',
         );
-        expect(gameState.isSafeField(0), isTrue);
-        expect(gameState.isSafeField(10), isTrue);
-        expect(gameState.isSafeField(20), isTrue);
-        expect(gameState.isSafeField(30), isTrue);
+        expect(gameState.isSafeField(0, 'player1'), isTrue);
+        expect(gameState.isSafeField(10, 'player1'), isTrue);
+        expect(gameState.isSafeField(20, 'player1'), isTrue);
+        expect(gameState.isSafeField(30, 'player1'), isTrue);
       });
 
       test('should return false for a non-start field', () {
@@ -37,19 +36,22 @@ void main() {
           players: players,
           currentTurnPlayerId: 'player1',
         );
-        expect(gameState.isSafeField(1), isFalse);
-        expect(gameState.isSafeField(11), isFalse);
+        expect(gameState.isSafeField(1, 'player1'), isFalse);
+        expect(gameState.isSafeField(11, 'player1'), isFalse);
       });
     });
 
     group('copy', () {
       test('should copy all fields correctly', () {
+        final testPlayers = [
+          Player('player1', 'Player 1', initialPositions: [0, 1]),
+          Player('player2', 'Player 2', initialPositions: [10], isAI: true),
+        ];
         final originalState = GameState(
           startIndex: startIndices,
-          players: players,
+          players: testPlayers, 
           currentTurnPlayerId: 'player1',
-          pieces: {'player1': [0, 1], 'player2': [10]},
-          diceRoll: 6,
+          lastDiceValue: 6,
           winnerId: 'player2',
         );
         final copiedState = originalState.copy();
@@ -60,54 +62,49 @@ void main() {
           expect(copiedState.players[i].id, originalState.players[i].id);
           expect(copiedState.players[i].name, originalState.players[i].name);
           expect(copiedState.players[i].isAI, originalState.players[i].isAI);
+          expect(copiedState.players[i].tokenPositions, originalState.players[i].tokenPositions);
         }
         expect(copiedState.currentTurnPlayerId, originalState.currentTurnPlayerId);
-        expect(copiedState.pieces, originalState.pieces);
-        expect(copiedState.diceRoll, originalState.diceRoll);
+        expect(copiedState.lastDiceValue, originalState.lastDiceValue);
         expect(copiedState.winnerId, originalState.winnerId);
       });
 
       test('modifications to copied state should not affect original state', () {
+        final testPlayersForModification = [
+          Player('player1', 'Player 1', initialPositions: [0, 1]),
+          Player('player2', 'Player 2', isAI: true), // Default token positions (all base)
+        ];
         final originalState = GameState(
           startIndex: startIndices,
-          players: players,
+          players: testPlayersForModification,
           currentTurnPlayerId: 'player1',
-          pieces: {'player1': [0, 1], 'player2': [10]},
         );
         final copiedState = originalState.copy();
 
-        // Modify pieces in copied state
-        copiedState.pieces['player1'] = [2, 3];
-        expect(originalState.pieces['player1'], [0, 1]);
-        expect(copiedState.pieces['player1'], [2, 3]);
+        final player1Copied = copiedState.players.firstWhere((p) => p.id == 'player1');
+        player1Copied.tokenPositions = [2, 3];
+        
+        final player1Original = originalState.players.firstWhere((p) => p.id == 'player1');
+        expect(player1Original.tokenPositions, [0, 1]); // Verify original is unchanged
+        expect(player1Copied.tokenPositions, [2, 3]);
 
-        // Modify players list in copied state (e.g., change a player's AI status)
-        // Note: Player objects themselves are copied by reference if not handled,
-        // but the list itself should be a new instance.
-        // For a true deep copy of players, Player.copy() would be needed if Player was mutable.
-        // Assuming Player is immutable or copy is handled within GameState.copy if necessary.
-        // If Player has mutable fields that GameState.copy doesn't deep copy, this test might need adjustment.
-        if (copiedState.players.isNotEmpty) {
-          copiedState.players[0] = Player('newPlayer', 'New Player');
+        if (copiedState.players.length > 1) { // Ensure there is a player at index 0 to modify
+          copiedState.players[0] = Player('newPlayer', 'New Player'); // This actually replaces player1 in copiedState
+           expect(originalState.players[0].id, 'player1'); // Original list's first player should still be 'player1'
         }
-        expect(originalState.players[0].id, 'player1');
+       
 
-
-        // Modify currentTurnPlayerId in copied state
         copiedState.currentTurnPlayerId = 'player2';
         expect(originalState.currentTurnPlayerId, 'player1');
         expect(copiedState.currentTurnPlayerId, 'player2');
 
-        // Modify dice roll
-        copiedState.diceRoll = 3;
-        expect(originalState.diceRoll, isNull); // Assuming it was null initially
-        expect(copiedState.diceRoll, 3);
+        copiedState.lastDiceValue = 3;
+        expect(originalState.lastDiceValue, isNull);
+        expect(copiedState.lastDiceValue, 3);
 
-        // Modify winner
         copiedState.winnerId = 'player1';
-        expect(originalState.winnerId, isNull);  // Assuming it was null initially
+        expect(originalState.winnerId, isNull);
         expect(copiedState.winnerId, 'player1');
-
       });
     });
 
@@ -118,8 +115,8 @@ void main() {
           players: players,
           currentTurnPlayerId: 'player2',
         );
-        expect(gameState.currentPlayer?.id, 'player2');
-        expect(gameState.currentPlayer?.name, 'Player 2');
+        expect(gameState.currentPlayer.id, 'player2');
+        expect(gameState.currentPlayer.name, 'Player 2');
       });
 
       test('isCurrentPlayerAI should return true for AI player', () {

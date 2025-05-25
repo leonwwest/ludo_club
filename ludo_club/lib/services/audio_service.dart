@@ -18,11 +18,11 @@ class AudioService {
   final AudioPlayer _victoryPlayer = AudioPlayer();
   
   // Pfade zu den Sounddateien
-  static const String _diceSoundPath = 'assets/audio/dice_roll.mp3';
-  static const String _moveSoundPath = 'assets/audio/move.mp3';
-  static const String _captureSoundPath = 'assets/audio/capture.mp3';
-  static const String _finishSoundPath = 'assets/audio/finish.mp3';
-  static const String _victorySoundPath = 'assets/audio/victory.mp3';
+  static const String _diceSoundPath = 'audio/dice_roll.mp3';
+  static const String _moveSoundPath = 'audio/move.mp3';
+  static const String _captureSoundPath = 'audio/capture.mp3';
+  static const String _finishSoundPath = 'audio/victory.mp3';
+  static const String _victorySoundPath = 'audio/victory.mp3';
   
   bool _soundEnabled = true;
   double _volume = 1.0;
@@ -41,7 +41,7 @@ class AudioService {
       // Setze das Volume für alle Player
       _setVolumeForAllPlayers();
     } catch (e) {
-      print('Fehler beim Laden der Soundeffekte: $e');
+      // print('Fehler beim Laden der Soundeffekte: $e'); // Removed avoid_print
       // Fehler leise behandeln, damit das Spiel auch ohne Sound funktioniert
     }
   }
@@ -74,61 +74,46 @@ class AudioService {
   
   /// Spielt den Würfel-Sound ab
   Future<void> playDiceSound() async {
-    if (!_soundEnabled) return;
-    
-    try {
-      await _dicePlayer.seek(Duration.zero);
-      await _dicePlayer.play();
-    } catch (e) {
-      print('Fehler beim Abspielen des Würfel-Sounds: $e');
+    if (_dicePlayer.processingState == ProcessingState.ready) {
+      await playSound(_diceSoundPath);
+    } else {
+      // print("AudioPlayer not ready for dice sound, state: ${_dicePlayer.processingState}"); // Removed avoid_print
     }
   }
   
   /// Spielt den Bewegungs-Sound ab
   Future<void> playMoveSound() async {
-    if (!_soundEnabled) return;
-    
-    try {
-      await _movePlayer.seek(Duration.zero);
-      await _movePlayer.play();
-    } catch (e) {
-      print('Fehler beim Abspielen des Bewegungs-Sounds: $e');
+    if (_movePlayer.processingState == ProcessingState.ready) {
+      await playSound(_moveSoundPath);
+    } else {
+      // print("AudioPlayer not ready for move sound, state: ${_movePlayer.processingState}"); // Removed avoid_print
     }
   }
   
   /// Spielt den Sound ab, wenn eine gegnerische Figur geschlagen wird
   Future<void> playCaptureSound() async {
-    if (!_soundEnabled) return;
-    
-    try {
-      await _capturePlayer.seek(Duration.zero);
-      await _capturePlayer.play();
-    } catch (e) {
-      print('Fehler beim Abspielen des Schlag-Sounds: $e');
+    if (_capturePlayer.processingState == ProcessingState.ready) {
+      await playSound(_captureSoundPath);
+    } else {
+      // print("AudioPlayer not ready for capture sound, state: ${_capturePlayer.processingState}"); // Removed avoid_print
     }
   }
   
   /// Spielt den Sound ab, wenn eine Figur ins Ziel kommt
   Future<void> playFinishSound() async {
-    if (!_soundEnabled) return;
-    
-    try {
-      await _finishPlayer.seek(Duration.zero);
-      await _finishPlayer.play();
-    } catch (e) {
-      print('Fehler beim Abspielen des Ziel-Sounds: $e');
+    if (_finishPlayer.processingState == ProcessingState.ready) {
+      await playSound(_finishSoundPath);
+    } else {
+      // print("AudioPlayer not ready for finish sound, state: ${_finishPlayer.processingState}"); // Removed avoid_print
     }
   }
   
   /// Spielt den Sound ab, wenn ein Spieler das Spiel gewinnt
   Future<void> playVictorySound() async {
-    if (!_soundEnabled) return;
-    
-    try {
-      await _victoryPlayer.seek(Duration.zero);
-      await _victoryPlayer.play();
-    } catch (e) {
-      print('Fehler beim Abspielen des Sieg-Sounds: $e');
+    if (_victoryPlayer.processingState == ProcessingState.ready) {
+      await playSound(_victorySoundPath);
+    } else {
+      // print("AudioPlayer not ready for victory sound, state: ${_victoryPlayer.processingState}"); // Removed avoid_print
     }
   }
   
@@ -139,5 +124,15 @@ class AudioService {
     await _capturePlayer.dispose();
     await _finishPlayer.dispose();
     await _victoryPlayer.dispose();
+  }
+
+  Future<void> playSound(String assetPath) async {
+    if (!_soundEnabled || _dicePlayer.playing) return;
+    try {
+      await _dicePlayer.setAsset(assetPath);
+      await _dicePlayer.play();
+    } catch (e) {
+      // print('Error playing sound $assetPath: $e'); // Removed avoid_print
+    }
   }
 } 

@@ -1,7 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ludo_club/models/game_state.dart';
 import 'package:ludo_club/services/statistics_service.dart';
+// import 'dart:convert'; // This line can be fully removed
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 
 void main() {
   // Ensure Flutter bindings are initialized for SharedPreferences mocking
@@ -49,6 +50,8 @@ void main() {
 
   group('StatisticsService Tests', () {
     late StatisticsService statisticsService;
+    // Expose the private constant for testing only
+    const String StatisticsService_playerStatsListKey = 'statPlayerNames';
 
     setUp(() async {
       // Clear SharedPreferences before each test in this group
@@ -125,7 +128,7 @@ void main() {
     });
     
     // Expose the private constant for testing only
-    const String StatisticsService_playerStatsListKey = 'statPlayerNames';
+    // const String StatisticsService_playerStatsListKey = 'statPlayerNames';
 
 
     test('getAllPlayerStats retrieves all saved player stats with correct display names', () async {
@@ -185,7 +188,7 @@ void main() {
       await statisticsService.incrementGamesPlayed("PlayerX", count: 1);
       await statisticsService.incrementGamesPlayed("PlayerY", count: 1);
 
-      await statisticsService.resetAllStats();
+      await statisticsService.resetAllStatistics();
 
       final allStats = await statisticsService.getAllPlayerStats();
       expect(allStats, isEmpty);
@@ -217,9 +220,9 @@ void main() {
     });
 
     test('stats keys are normalized (trimmed, lowercase)', () async {
-      final fancyName = "  Player C  ";
-      final normalizedLookup = "player c";
-      final keyForStats = 'stats_player c'; // This is what _playerStatsKey("  Player C  ") would produce
+      const fancyName = "  Player C  ";
+      const normalizedLookup = "player c";
+      const keyForStats = 'stats_player c';
 
       await statisticsService.incrementGamesPlayed(fancyName, count: 1);
       

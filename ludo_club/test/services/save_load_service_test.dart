@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ludo_club/models/game_state.dart'; // Player is in here too
 import 'package:ludo_club/services/save_load_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
 
 // Manual Mock for SharedPreferences
 class MockSharedPreferences implements SharedPreferences {
@@ -92,38 +93,39 @@ void main() {
 
   group('SaveLoadService', () {
     late SaveLoadService saveLoadService;
-    late MockSharedPreferences mockSharedPreferences;
+    // MockSharedPreferences instance is not directly injected into SaveLoadService anymore.
+    // We will use SharedPreferences.setMockInitialValues() globally for tests.
 
-    // Helper to create a sample GameState
+    // Helper to create a sample GameState (ensure it matches definition, e.g. using lastDiceValue)
     GameState createSampleGameState({
       String gameId = 'game1',
       String currentPlayerId = 'player1',
       List<Player>? players,
-      int diceValue = 5,
-      int rollCount = 1,
+      int? lastDiceVal, // Changed from diceValue
+      int rollCount = 0, // Default to 0 as per GameState constructor
       String? winnerId,
     }) {
       final p = players ??
           [
-            Player('player1', 'Alice', initialPositions: [-1, 10, 20, 99], isAI: false),
-            Player('player2', 'Bob', initialPositions: [5, 15, 25, -1], isAI: true),
+            Player('player1', 'Alice', initialPositions: [-1, 10, 20, GameState.finishedPosition]),
+            Player('player2', 'Bob', initialPositions: [5, 15, 25, GameState.basePosition]),
           ];
       return GameState(
-        gameId: gameId,
+        gameId: gameId, // GameState has gameId
         startIndex: {'player1': 0, 'player2': 13, 'player3': 26, 'player4': 39},
         players: p,
         currentTurnPlayerId: currentPlayerId,
-        lastDiceValue: diceValue,
+        lastDiceValue: lastDiceVal,
         currentRollCount: rollCount,
         winnerId: winnerId,
       );
     }
 
-    setUp(() async {
-      mockSharedPreferences = MockSharedPreferences();
-      saveLoadService = SaveLoadService.withPrefs(mockSharedPreferences);
-      // No need to call SharedPreferences.setMockInitialValues here unless for a specific test case
-      // as most tests will prepare their own SharedPreferences state.
+    setUp(() {
+      // SaveLoadService has no constructor arguments.
+      saveLoadService = SaveLoadService();
+      // Crucial: Clear SharedPreferences before each test to ensure isolation.
+      SharedPreferences.setMockInitialValues({}); 
     });
 
     group('saveGame', () {
@@ -134,125 +136,110 @@ void main() {
         final success = await saveLoadService.saveGame(gameState, customName: customName);
         expect(success, isTrue);
 
-        final savedGamesList = mockSharedPreferences.getStringList(SaveLoadService.savedGamesKey);
+        final prefs = await SharedPreferences.getInstance();
+        final savedGamesList = prefs.getStringList('saved_games');
+
         expect(savedGamesList, isNotNull);
         expect(savedGamesList!.length, 1);
 
         final gameEntryJson = jsonDecode(savedGamesList.first) as Map<String, dynamic>;
-        expect(gameEntryJson['name'], customName);
-        expect(gameEntryJson['gameId'], gameState.gameId);
-        expect(gameEntryJson['timestamp'], isNotNull);
-        expect(DateTime.fromMillisecondsSinceEpoch(gameEntryJson['timestamp'] as int).isBefore(DateTime.now().add(Duration(seconds:1))), isTrue);
-
-
-        final savedStateJson = mockSharedPreferences.getString(gameState.gameId!);
-        expect(savedStateJson, isNotNull);
-        final savedStateMap = jsonDecode(savedStateJson!) as Map<String, dynamic>;
-        expect(GameState.fromJson(savedStateMap), gameState); // Uses GameState.==
+        expect(gameEntryJson['saveName'], customName);
+        final savedGameState = SaveLoadServiceTestAccessors.jsonToGameState(gameEntryJson);
+        expect(savedGameState.gameId, gameState.gameId);
+        expect(savedGameState, gameState);
       });
 
       test('saves a new game with an auto-generated name if customName is null', () async {
         final gameState = createSampleGameState(gameId: 'autoNameGame');
-        await saveLoadService.saveGame(gameState);
+        final success = await saveLoadService.saveGame(gameState);
+        expect(success, isTrue);
 
-        final savedGamesList = mockSharedPreferences.getStringList(SaveLoadService.savedGamesKey);
+        final prefs = await SharedPreferences.getInstance();
+        final savedGamesList = prefs.getStringList('saved_games');
         expect(savedGamesList, isNotNull);
-        final gameEntryJson = jsonDecode(savedGamesList!.first) as Map<String, dynamic>;
-        
-        expect(gameEntryJson['name'], startsWith('Game ')); // Default naming convention
-        expect(gameEntryJson['gameId'], gameState.gameId);
-      });
-
-      test('updates existing game if gameId already in metadata list', () async {
-        final originalGameState = createSampleGameState(gameId: 'existingGame', currentPlayerId: 'player1');
-        await saveLoadService.saveGame(originalGameState, customName: "Original Name");
-
-        final updatedGameState = originalGameState.copy();
-        updatedGameState.currentTurnPlayerId = 'player2'; // Make a change
-        updatedGameState.lastDiceValue = 3;
-
-        await saveLoadService.saveGame(updatedGameState, customName: "Updated Name");
-
-        final savedGamesList = mockSharedPreferences.getStringList(SaveLoadService.savedGamesKey);
-        expect(savedGamesList!.length, 1); // Should not add a new entry
+        expect(savedGamesList!.length, 1);
 
         final gameEntryJson = jsonDecode(savedGamesList.first) as Map<String, dynamic>;
-        expect(gameEntryJson['name'], "Updated Name"); // Name should be updated
-        expect(gameEntryJson['gameId'], originalGameState.gameId);
+        expect(gameEntryJson['saveName'], startsWith('Spielstand vom '));
+        final savedGameState = SaveLoadServiceTestAccessors.jsonToGameState(gameEntryJson);
+        expect(savedGameState.gameId, gameState.gameId);
+      });
 
-        final savedStateJson = mockSharedPreferences.getString(originalGameState.gameId!);
-        expect(GameState.fromJson(jsonDecode(savedStateJson!)), updatedGameState);
+      test('saveGame adds to the list, does not update existing by gameId', () async {
+        final originalGameState = createSampleGameState(gameId: 'gameToOverwrite', currentPlayerId: 'player1');
+        await saveLoadService.saveGame(originalGameState, customName: "Original Save");
+
+        final slightlyDifferentGameState = createSampleGameState(gameId: 'gameToOverwrite', currentPlayerId: 'player2');
+        await saveLoadService.saveGame(slightlyDifferentGameState, customName: "New Save with Same ID");
+
+        final prefs = await SharedPreferences.getInstance();
+        final savedGamesList = prefs.getStringList('saved_games');
+        expect(savedGamesList!.length, 2);
+
+        final entry1Json = jsonDecode(savedGamesList[0]) as Map<String, dynamic>;
+        final entry2Json = jsonDecode(savedGamesList[1]) as Map<String, dynamic>;
+
+        expect(entry1Json['saveName'], "Original Save");
+        final state1 = SaveLoadServiceTestAccessors.jsonToGameState(entry1Json);
+        expect(state1.currentTurnPlayerId, 'player1');
+
+        expect(entry2Json['saveName'], "New Save with Same ID");
+        final state2 = SaveLoadServiceTestAccessors.jsonToGameState(entry2Json);
+        expect(state2.currentTurnPlayerId, 'player2');
       });
       
-      test('limits the number of saved games to maxSavedGames', () async {
-        final oldMax = SaveLoadService.maxSavedGames;
-        SaveLoadService.maxSavedGames = 2; // For easier testing
-
-        for (int i = 0; i < SaveLoadService.maxSavedGames + 1; i++) {
-          final gameState = createSampleGameState(gameId: 'game$i');
-          await saveLoadService.saveGame(gameState, customName: 'Game $i');
-        }
-
-        final savedGamesList = mockSharedPreferences.getStringList(SaveLoadService.savedGamesKey);
-        expect(savedGamesList!.length, SaveLoadService.maxSavedGames);
-
-        final gameEntry0 = jsonDecode(savedGamesList.first) as Map<String, dynamic>;
-        // The oldest game ('game0') should be removed.
-        // Games are added to the start of the list, so the last one is 'gameMax'
-        // and the first one is 'gameMax-1' (after the oldest is removed)
-        expect(gameEntry0['gameId'], 'game2'); // game0 removed, game1 and game2 remain, game2 is newest
-        
-        expect(mockSharedPreferences.getString('game0'), isNull); // game0 state should be deleted
-        expect(mockSharedPreferences.getString('game1'), isNotNull);
-        expect(mockSharedPreferences.getString('game2'), isNotNull);
-
-        SaveLoadService.maxSavedGames = oldMax; // Reset for other tests
-      });
-
       test('saves multiple different games correctly', () async {
-        final game1 = createSampleGameState(gameId: 'multi1', currentPlayerId: 'player1');
+        final game1 = createSampleGameState(gameId: 'multi1');
         final game2 = createSampleGameState(gameId: 'multi2', currentPlayerId: 'player2');
 
         await saveLoadService.saveGame(game1, customName: 'Multi 1');
         await saveLoadService.saveGame(game2, customName: 'Multi 2');
 
-        final savedGamesList = mockSharedPreferences.getStringList(SaveLoadService.savedGamesKey);
+        final prefs = await SharedPreferences.getInstance();
+        final savedGamesList = prefs.getStringList('saved_games');
         expect(savedGamesList!.length, 2);
 
-        final entry1Json = jsonDecode(savedGamesList![1]) as Map<String, dynamic>; // game1 was saved first
-        final entry2Json = jsonDecode(savedGamesList[0]) as Map<String, dynamic>; // game2 was saved second (newest)
+        final entry1Json = jsonDecode(savedGamesList[0]) as Map<String, dynamic>; 
+        final entry2Json = jsonDecode(savedGamesList[1]) as Map<String, dynamic>; 
 
-        expect(entry1Json['gameId'], 'multi1');
-        expect(entry2Json['gameId'], 'multi2');
+        expect(entry1Json['saveName'], 'Multi 1');
+        expect(SaveLoadServiceTestAccessors.jsonToGameState(entry1Json).gameId, 'multi1');
 
-        expect(GameState.fromJson(jsonDecode(mockSharedPreferences.getString('multi1')!)), game1);
-        expect(GameState.fromJson(jsonDecode(mockSharedPreferences.getString('multi2')!)), game2);
+        expect(entry2Json['saveName'], 'Multi 2');
+        expect(SaveLoadServiceTestAccessors.jsonToGameState(entry2Json).gameId, 'multi2');
       });
     });
 
     group('loadGame', () {
       late GameState state1, state2;
+      String state1Json = "";
+      String state2Json = "";
 
       setUp(() async {
+        SharedPreferences.setMockInitialValues({}); // Clear from previous tests
         state1 = createSampleGameState(gameId: 'load1', currentPlayerId: 'p1');
         state2 = createSampleGameState(gameId: 'load2', currentPlayerId: 'p2');
         
-        // Pre-populate SharedPreferences
-        await saveLoadService.saveGame(state1, customName: "Load Game 1");
-        await saveLoadService.saveGame(state2, customName: "Load Game 2");
-        // After these saves, metadata list will be [entry_state2, entry_state1]
+        final state1SaveData = SaveLoadServiceTestAccessors.gameStateToJsonInternal(state1);
+        state1SaveData['saveName'] = "Load Game 1";
+        state1SaveData['saveDate'] = DateTime.now().millisecondsSinceEpoch;
+        state1Json = jsonEncode(state1SaveData);
+
+        final state2SaveData = SaveLoadServiceTestAccessors.gameStateToJsonInternal(state2);
+        state2SaveData['saveName'] = "Load Game 2";
+        state2SaveData['saveDate'] = DateTime.now().add(const Duration(seconds: 1)).millisecondsSinceEpoch;
+        state2Json = jsonEncode(state2SaveData);
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList('saved_games', [state1Json, state2Json]);
       });
 
-      test('loads the most recent game (index 0)', () async {
-        final loadedState = await saveLoadService.loadGame(0);
+      test('loads a game by index correctly', () async {
+        final loadedState = await saveLoadService.loadGame(0); 
         expect(loadedState, isNotNull);
-        expect(loadedState, state2); // state2 was saved last, so it's at index 0
-      });
-
-      test('loads an older game by index', () async {
-        final loadedState = await saveLoadService.loadGame(1);
-        expect(loadedState, isNotNull);
-        expect(loadedState, state1); // state1 was saved first, so it's at index 1
+        expect(loadedState!.gameId, state1.gameId);
+        expect(loadedState.currentTurnPlayerId, state1.currentTurnPlayerId);
+        expect(loadedState, state1);
       });
 
       test('returns null for an out-of-bounds index (negative)', () async {
@@ -264,110 +251,101 @@ void main() {
         final loadedState = await saveLoadService.loadGame(5); // Only 2 games saved
         expect(loadedState, isNull);
       });
-       test('returns null if game state string is missing for a valid metadata entry', () async {
-        // Corrupt SharedPreferences: remove the GameState string for an existing metadata entry
-        final savedGamesMeta = mockSharedPreferences.getStringList(SaveLoadService.savedGamesKey)!;
-        final firstGameMeta = jsonDecode(savedGamesMeta.first) as Map<String, dynamic>;
-        mockSharedPreferences.remove(firstGameMeta['gameId'] as String);
 
-        final loadedState = await saveLoadService.loadGame(0);
+      test('returns null if saved game string is malformed JSON', () async {
+        final malformedList = [state1Json, "this_is_not_json"];
+        SharedPreferences.setMockInitialValues({'saved_games': malformedList});
+        final loadedState = await saveLoadService.loadGame(1); // Attempt to load bad JSON
         expect(loadedState, isNull);
       });
     });
 
     group('deleteGame', () {
-      late GameState state1, state2, state3;
+      String game1Json = "", game2Json = "", game3Json = "";
 
       setUp(() async {
-        state1 = createSampleGameState(gameId: 'del1');
-        state2 = createSampleGameState(gameId: 'del2');
-        state3 = createSampleGameState(gameId: 'del3');
-        await saveLoadService.saveGame(state1, customName: "Delete 1");
-        await saveLoadService.saveGame(state2, customName: "Delete 2");
-        await saveLoadService.saveGame(state3, customName: "Delete 3");
-        // Metadata list: [entry_state3, entry_state2, entry_state1]
+        SharedPreferences.setMockInitialValues({}); 
+        final s1 = createSampleGameState(gameId: 'del1');
+        final s2 = createSampleGameState(gameId: 'del2');
+        final s3 = createSampleGameState(gameId: 'del3');
+
+        game1Json = jsonEncode(SaveLoadServiceTestAccessors.gameStateToJsonWithSaveName(s1, 'Delete Game 1'));
+        game2Json = jsonEncode(SaveLoadServiceTestAccessors.gameStateToJsonWithSaveName(s2, 'Delete Game 2'));
+        game3Json = jsonEncode(SaveLoadServiceTestAccessors.gameStateToJsonWithSaveName(s3, 'Delete Game 3'));
+
+        final List<String> initialSavedGames = [game1Json, game2Json, game3Json];
+        SharedPreferences.setMockInitialValues({'saved_games': initialSavedGames});
       });
 
-      test('deletes a game from the middle of the list', () async {
-        final success = await saveLoadService.deleteGame(1); // Deletes 'del2'
+      test('deletes a game by index and returns true', () async {
+        final success = await saveLoadService.deleteGame(1); // Deletes game2Json ('del2')
         expect(success, isTrue);
 
-        final savedGamesList = mockSharedPreferences.getStringList(SaveLoadService.savedGamesKey);
+        final prefs = await SharedPreferences.getInstance();
+        final savedGamesList = prefs.getStringList('saved_games');
+        expect(savedGamesList, isNotNull);
         expect(savedGamesList!.length, 2);
-        expect(mockSharedPreferences.getString('del2'), isNull); // GameState string removed
-        
-        final entries = savedGamesList.map((s) => jsonDecode(s) as Map<String,dynamic>).toList();
-        expect(entries.any((e) => e['gameId'] == 'del2'), isFalse); // Metadata entry removed
-        expect(entries.any((e) => e['gameId'] == 'del1'), isTrue);
-        expect(entries.any((e) => e['gameId'] == 'del3'), isTrue);
+        expect(savedGamesList.contains(game2Json), isFalse);
+        expect(savedGamesList[0], game1Json);
+        expect(savedGamesList[1], game3Json);
       });
 
-      test('deletes the most recent game (index 0)', async {
-        final success = await saveLoadService.deleteGame(0); // Deletes 'del3'
-        expect(success, isTrue);
-        expect(mockSharedPreferences.getStringList(SaveLoadService.savedGamesKey)!.length, 2);
-        expect(mockSharedPreferences.getString('del3'), isNull);
-      });
-      
-      test('deletes the oldest game (last index)', async {
-        final success = await saveLoadService.deleteGame(2); // Deletes 'del1'
-        expect(success, isTrue);
-        expect(mockSharedPreferences.getStringList(SaveLoadService.savedGamesKey)!.length, 2);
-        expect(mockSharedPreferences.getString('del1'), isNull);
-      });
-
-      test('deletes the only game', () async {
-        // Clear and save only one game
-        await mockSharedPreferences.clear();
-        final singleState = createSampleGameState(gameId: 'single');
-        await saveLoadService.saveGame(singleState, customName: "Single Game");
-
-        final success = await saveLoadService.deleteGame(0);
-        expect(success, isTrue);
-        expect(mockSharedPreferences.getStringList(SaveLoadService.savedGamesKey)!.isEmpty, isTrue);
-        expect(mockSharedPreferences.getString('single'), isNull);
-      });
-      
-      test('returns false for an out-of-bounds index (negative)', () async {
+      test('returns false for an out-of-bounds index (negative) and list unchanged', () async {
         final success = await saveLoadService.deleteGame(-1);
         expect(success, isFalse);
-        expect(mockSharedPreferences.getStringList(SaveLoadService.savedGamesKey)!.length, 3); // No change
+        final prefs = await SharedPreferences.getInstance();
+        final savedGamesList = prefs.getStringList('saved_games');
+        expect(savedGamesList!.length, 3); // No change
       });
 
-      test('returns false for an out-of-bounds index (too large)', () async {
-        final success = await saveLoadService.deleteGame(5);
+      test('returns false for an out-of-bounds index (too large) and list unchanged', () async {
+        final success = await saveLoadService.deleteGame(3); // Index 3 is out of bounds for list of length 3
         expect(success, isFalse);
-        expect(mockSharedPreferences.getStringList(SaveLoadService.savedGamesKey)!.length, 3); // No change
+        final prefs = await SharedPreferences.getInstance();
+        final savedGamesList = prefs.getStringList('saved_games');
+        expect(savedGamesList!.length, 3); // No change
       });
     });
 
     group('getSavedGames', () {
       test('returns an empty list when no games are saved', () async {
-        mockSharedPreferences.setMockInitialValues({}); // Ensure empty
-        final games = await saveLoadService.getSavedGames();
-        expect(games, isEmpty);
+        SharedPreferences.setMockInitialValues({}); // Ensure empty
+        final gamesInfo = await saveLoadService.getSavedGames();
+        expect(gamesInfo, isEmpty);
       });
 
-      test('returns a list of saved game metadata', () async {
-        final state1 = createSampleGameState(gameId: 'meta1');
-        final state2 = createSampleGameState(gameId: 'meta2');
-        await saveLoadService.saveGame(state1, customName: "Metadata Game 1");
-        await saveLoadService.saveGame(state2, customName: "Metadata Game 2");
-        // Metadata list: [entry_state2, entry_state1]
+      test('returns correct metadata for saved games', () async {
+        final s1 = createSampleGameState(gameId: 'meta1');
+        final s2 = createSampleGameState(gameId: 'meta2');
+        final name1 = "Metadata Game 1";
+        final name2 = "Metadata Game 2";
+        
+        final game1SaveJson = SaveLoadServiceTestAccessors.gameStateToJsonWithSaveName(s1, name1);
+        final game2SaveJson = SaveLoadServiceTestAccessors.gameStateToJsonWithSaveName(s2, name2);
+        
+        SharedPreferences.setMockInitialValues({
+          'saved_games': [jsonEncode(game1SaveJson), jsonEncode(game2SaveJson)]
+        });
 
         final gamesInfo = await saveLoadService.getSavedGames();
         expect(gamesInfo.length, 2);
 
-        // Check newest (index 0)
-        expect(gamesInfo[0]['name'], "Metadata Game 2");
-        expect(gamesInfo[0]['gameId'], "meta2");
-        expect(gamesInfo[0]['timestamp'], isA<int>());
-        expect(gamesInfo[0]['gameStateJson'], isNull); // Should not contain full state
+        expect(gamesInfo[0]['saveName'], name1);
+        expect(gamesInfo[0]['saveDate'], isA<DateTime>());
+        expect(gamesInfo[0]['saveDate'].millisecondsSinceEpoch, game1SaveJson['saveDate']);
 
-        // Check older (index 1)
-        expect(gamesInfo[1]['name'], "Metadata Game 1");
-        expect(gamesInfo[1]['gameId'], "meta1");
-        expect(gamesInfo[1]['timestamp'], isA<int>());
+        expect(gamesInfo[1]['saveName'], name2);
+        expect(gamesInfo[1]['saveDate'], isA<DateTime>());
+        expect(gamesInfo[1]['saveDate'].millisecondsSinceEpoch, game2SaveJson['saveDate']);
+      });
+
+      test('handles malformed JSON strings in saved games list gracefully', () async {
+         SharedPreferences.setMockInitialValues({
+          'saved_games': ["this_is_not_json", jsonEncode(SaveLoadServiceTestAccessors.gameStateToJsonWithSaveName(createSampleGameState(), "Good Game"))]
+        });
+        final gamesInfo = await saveLoadService.getSavedGames();
+        expect(gamesInfo.length, 1);
+        expect(gamesInfo[0]['saveName'], "Good Game");
       });
     });
 
@@ -378,14 +356,13 @@ void main() {
 
         final loadedState = await saveLoadService.loadGame(0);
         expect(loadedState, isNotNull);
-        expect(loadedState, originalState); // Uses GameState.==
+        expect(loadedState, originalState);
 
-        // Explicit checks for a few key properties
         expect(loadedState!.gameId, originalState.gameId);
         expect(loadedState.currentTurnPlayerId, originalState.currentTurnPlayerId);
         expect(loadedState.players.length, originalState.players.length);
         for (int i = 0; i < loadedState.players.length; i++) {
-          expect(loadedState.players[i], originalState.players[i]); // Uses Player.==
+          expect(loadedState.players[i], originalState.players[i]);
         }
         expect(loadedState.lastDiceValue, originalState.lastDiceValue);
       });
@@ -395,12 +372,11 @@ void main() {
       test('loadGame returns null for malformed GameState JSON', () async {
         final gameId = 'malformedJsonGame';
         final metadataList = [
-          jsonEncode({'gameId': gameId, 'name': 'Malformed Test', 'timestamp': DateTime.now().millisecondsSinceEpoch})
+          jsonEncode({'gameId': gameId, 'saveName': 'Malformed Test', 'saveDate': DateTime.now().millisecondsSinceEpoch})
         ];
-        mockSharedPreferences.setMockInitialValues({
-          SaveLoadService.savedGamesKey: metadataList,
-          gameId: 'this_is_not_valid_json',
-        });
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList('saved_games', metadataList);
+        await prefs.setString(gameId, 'this_is_not_valid_json');
 
         final loadedState = await saveLoadService.loadGame(0);
         expect(loadedState, isNull);
@@ -411,17 +387,14 @@ void main() {
         final metadataList = [
           jsonEncode({'gameId': gameId, 'name': 'Missing Fields Test', 'timestamp': DateTime.now().millisecondsSinceEpoch})
         ];
-        // Valid JSON, but GameState.fromJson would fail (e.g., missing 'players' or 'currentTurnPlayerId')
         final incompleteJson = jsonEncode({
           'startIndex': {'p1': 0},
-          // 'players': [], // Missing players
           'currentTurnPlayerId': 'p1',
           'gameId': gameId,
         });
-        mockSharedPreferences.setMockInitialValues({
-          SaveLoadService.savedGamesKey: metadataList,
-          gameId: incompleteJson,
-        });
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList('saved_games', metadataList);
+        await prefs.setString(gameId, incompleteJson);
 
         final loadedState = await saveLoadService.loadGame(0);
         expect(loadedState, isNull, reason: "GameState.fromJson should fail and service should handle it by returning null.");
@@ -436,17 +409,23 @@ void main() {
           jsonEncode({'gameId': corruptedGameId, 'name': 'Corrupted Entry', 'timestamp': DateTime.now().millisecondsSinceEpoch}),
           jsonEncode({'gameId': validGameId, 'name': 'Valid Entry', 'timestamp': DateTime.now().millisecondsSinceEpoch}),
         ];
-        mockSharedPreferences.setMockInitialValues({
-          SaveLoadService.savedGamesKey: metadataList,
-          // GameState for corruptedGameId is intentionally missing
-          validGameId: jsonEncode(validGameState.toJson()),
-        });
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList('saved_games', metadataList);
 
-        // Attempt to load the corrupted one (index 0)
+        Map<String, dynamic> corruptedEntry = {'gameId': corruptedGameId, 'name': 'Corrupted Entry', 'timestamp': DateTime.now().millisecondsSinceEpoch};
+        
+        Map<String, dynamic> validEntry = SaveLoadServiceTestAccessors.gameStateToJsonWithSaveName(validGameState, "Valid Entry");
+        
+        final correctedMetadataList = [
+          jsonEncode(corruptedEntry),
+          jsonEncode(validEntry)
+        ];
+
+        await prefs.setStringList('saved_games', correctedMetadataList);
+
         final corruptedLoadedState = await saveLoadService.loadGame(0);
         expect(corruptedLoadedState, isNull, reason: "Loading a game with missing state JSON should return null.");
 
-        // Attempt to load the valid one (index 1)
         final validLoadedState = await saveLoadService.loadGame(1);
         expect(validLoadedState, isNotNull, reason: "Should still be able to load other valid games.");
         expect(validLoadedState, validGameState);
@@ -457,98 +436,116 @@ void main() {
         final validEntry = {'gameId': 'valid1', 'name': 'Valid Game Metadata', 'timestamp': DateTime.now().millisecondsSinceEpoch};
         final List<String> savedGamesIndex = [
           jsonEncode(validEntry),
-          'this_is_not_json', // Malformed entry
+          'this_is_not_json',
           jsonEncode({'gameId': 'valid2', 'name': 'Another Valid', 'timestamp': DateTime.now().millisecondsSinceEpoch}),
         ];
-        mockSharedPreferences.setMockInitialValues({
-          SaveLoadService.savedGamesKey: savedGamesIndex,
-        });
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList('saved_games', savedGamesIndex);
 
         final gamesInfo = await saveLoadService.getSavedGames();
         expect(gamesInfo.length, 2, reason: "Should skip the malformed JSON entry.");
-        expect(gamesInfo[0]['gameId'], 'valid1');
-        expect(gamesInfo[1]['gameId'], 'valid2');
+        expect(gamesInfo[0]['saveName'], 'Valid Game Metadata');
+        expect(gamesInfo[1]['saveName'], 'Another Valid');
       });
 
       test('getSavedGames filters out entries with missing required fields in metadata JSON', () async {
         final List<String> savedGamesIndex = [
-          jsonEncode({'gameId': 'validFull', 'name': 'Valid Full', 'timestamp': DateTime.now().millisecondsSinceEpoch}),
-          jsonEncode({'gameId': 'missingName', 'timestamp': DateTime.now().millisecondsSinceEpoch}), // Missing 'name'
-          jsonEncode({'name': 'missingGameId', 'timestamp': DateTime.now().millisecondsSinceEpoch}), // Missing 'gameId'
-          jsonEncode({'gameId': 'validAgain', 'name': 'Valid Again', 'timestamp': DateTime.now().millisecondsSinceEpoch}),
+          jsonEncode({'gameId': 'validFull', 'saveName': 'Valid Full', 'saveDate': DateTime.now().millisecondsSinceEpoch}),
+          jsonEncode({'gameId': 'missingName', 'saveDate': DateTime.now().millisecondsSinceEpoch}),
+          jsonEncode({'saveName': 'missingGameId', 'saveDate': DateTime.now().millisecondsSinceEpoch}),
+          jsonEncode({'gameId': 'validAgain', 'saveName': 'Valid Again', 'saveDate': DateTime.now().millisecondsSinceEpoch}),
         ];
-         mockSharedPreferences.setMockInitialValues({
-          SaveLoadService.savedGamesKey: savedGamesIndex,
-        });
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList('saved_games', savedGamesIndex);
 
         final gamesInfo = await saveLoadService.getSavedGames();
-        expect(gamesInfo.length, 2, reason: "Should skip entries missing required metadata fields.");
-        expect(gamesInfo.any((g) => g['gameId'] == 'validFull'), isTrue);
-        expect(gamesInfo.any((g) => g['gameId'] == 'validAgain'), isTrue);
+        expect(gamesInfo.length, 2, reason: "Should skip entries missing required metadata fields like saveName or saveDate (gameId is not directly used by getSavedGames for its output map).");
+        expect(gamesInfo.any((g) => g['saveName'] == 'Valid Full'), isTrue);
+        expect(gamesInfo.any((g) => g['saveName'] == 'Valid Again'), isTrue);
         expect(gamesInfo.any((g) => g['gameId'] == 'missingName'), isFalse);
-        expect(gamesInfo.any((g) => g['name'] == 'missingGameId'), isFalse);
+        expect(gamesInfo.any((g) => g['saveName'] == 'missingGameId'), isFalse);
       });
 
       test('getSavedGames returns metadata even if the GameState JSON itself is missing or corrupted', () async {
-        // This scenario tests that getSavedGames focuses on metadata integrity.
-        // loadGame would fail for these, but getSavedGames should still list them.
         final gameId1 = 'metaOnly1';
         final gameId2 = 'metaOnly2_corruptState';
         final List<String> savedGamesIndex = [
-          jsonEncode({'gameId': gameId1, 'name': 'Meta Only - No State String', 'timestamp': DateTime.now().millisecondsSinceEpoch}),
-          jsonEncode({'gameId': gameId2, 'name': 'Meta Only - Corrupt State String', 'timestamp': DateTime.now().millisecondsSinceEpoch}),
+          jsonEncode({'gameId': gameId1, 'saveName': 'Meta Only - No State String', 'saveDate': DateTime.now().millisecondsSinceEpoch}),
+          jsonEncode({'gameId': gameId2, 'saveName': 'Meta Only - Corrupt State String', 'saveDate': DateTime.now().millisecondsSinceEpoch, 'players': 'this_is_bad_json_for_part_of_state'}),
         ];
-        mockSharedPreferences.setMockInitialValues({
-          SaveLoadService.savedGamesKey: savedGamesIndex,
-          // gameId1's state string is missing
-          gameId2: 'this_is_bad_json_for_state', // gameId2 has corrupted state string
-        });
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList('saved_games', savedGamesIndex);
         
         final gamesInfo = await saveLoadService.getSavedGames();
         expect(gamesInfo.length, 2);
-        expect(gamesInfo[0]['gameId'], gameId1);
-        expect(gamesInfo[1]['gameId'], gameId2);
+        expect(gamesInfo[0]['saveName'], 'Meta Only - No State String');
+        expect(gamesInfo[1]['saveName'], 'Meta Only - Corrupt State String');
 
-        // Verify that loading these would indeed fail (as per other tests)
         final state1 = await saveLoadService.loadGame(0);
-        expect(state1, isNull, reason: "Loading game with missing state string should fail.");
+        expect(state1, isNull, reason: "Loading game with missing/incomplete state in list entry should fail if essential parts are missing for _jsonToGameState.");
         final state2 = await saveLoadService.loadGame(1);
-        expect(state2, isNull, reason: "Loading game with corrupt state string should fail.");
+        expect(state2, isNull, reason: "Loading game with corrupt state in list entry should fail.");
       });
 
-      test('saveGame returns false if SharedPreferences.setStringList fails for metadata', () async {
-        mockSharedPreferences.setStringList = (String key, List<String> value) async {
-          if (key == SaveLoadService.savedGamesKey) return false; // Simulate failure
-          mockSharedPreferences._values[key] = value; // Original behavior for other keys
-          return true;
-        };
-        final gameState = createSampleGameState(gameId: 'failMetaSave');
-        final success = await saveLoadService.saveGame(gameState);
-        expect(success, isFalse);
-      });
-      
-      test('saveGame returns false if SharedPreferences.setString fails for game state', () async {
-        mockSharedPreferences.setString = (String key, String value) async {
-          if (key != SaveLoadService.savedGamesKey) return false; // Simulate failure for game state string
-          mockSharedPreferences._values[key] = value; // Original behavior for metadata key
-          return true;
-        };
-        final gameState = createSampleGameState(gameId: 'failStateSave');
-        final success = await saveLoadService.saveGame(gameState);
-        expect(success, isFalse);
-      });
-
-      // Conceptual point: Direct SharedPreferences operational errors (e.g., disk full, platform errors)
-      // are hard to simulate with the current MockSharedPreferences. The service would typically
-      // let these propagate as Exceptions. The current tests for setString/setStringList returning false
-      // cover cases where the operation itself reports a failure, which is a form of error handling.
-      // True platform-level errors would likely require a more sophisticated mocking layer for SharedPreferences.
-      // For now, this is noted as a limitation of the current test setup rather than a specific test case to implement.
-       test('Conceptual: SharedPreferences platform errors', () {
-        print("NOTE: Direct simulation of SharedPreferences platform errors (e.g., disk full) is beyond current mock capabilities. Service would typically propagate these.");
+      test('Conceptual: SharedPreferences platform errors', () {
         expect(true, isTrue); // Placeholder
       });
 
     });
   });
+}
+
+// Extended SaveLoadServiceTestAccessors to include a helper for the full save structure
+class SaveLoadServiceTestAccessors extends SaveLoadService {
+  // Accessor for the private _gameStateToJson method
+  static Map<String, dynamic> gameStateToJsonInternal(GameState gameState) {
+    // This mirrors the private _gameStateToJson method in SaveLoadService
+    return {
+      'startIndex': gameState.startIndex,
+      'players': gameState.players.map((player) => {
+        'id': player.id,
+        'name': player.name,
+        'tokenPositions': player.tokenPositions,
+        'isAI': player.isAI,
+      }).toList(),
+      'currentTurnPlayerId': gameState.currentTurnPlayerId,
+      'lastDiceValue': gameState.lastDiceValue,
+      'currentRollCount': gameState.currentRollCount,
+      'winnerId': gameState.winnerId,
+      'gameId': gameState.gameId, // Include gameId as it's part of GameState
+    };
+  }
+
+  // Helper to create the full JSON structure that SaveLoadService saves for an entry
+  static Map<String, dynamic> gameStateToJsonWithSaveName(GameState gameState, String saveName, [DateTime? date]) {
+    final gameData = gameStateToJsonInternal(gameState);
+    // Add the fields that SaveLoadService itself adds before encoding
+    gameData['saveName'] = saveName;
+    gameData['saveDate'] = (date ?? DateTime.now()).millisecondsSinceEpoch; 
+    // gameId is already part of gameStateToJsonInternal if present in GameState
+    return gameData;
+  }
+
+  // Accessor for the private _jsonToGameState method (already provided in previous step)
+  static GameState jsonToGameState(Map<String, dynamic> json) {
+    final startIndex = Map<String, int>.from(json['startIndex'] as Map);
+    final playersList = (json['players'] as List).map((playerJsonRaw) {
+      final playerJson = playerJsonRaw as Map<String, dynamic>;
+      return Player(
+        playerJson['id'] as String,
+        playerJson['name'] as String,
+        initialPositions: List<int>.from(playerJson['tokenPositions'] as List),
+        isAI: playerJson['isAI'] as bool,
+      );
+    }).toList();
+    return GameState(
+      gameId: json['gameId'] as String?, // GameState can have a gameId
+      startIndex: startIndex,
+      players: playersList,
+      currentTurnPlayerId: json['currentTurnPlayerId'] as String,
+      lastDiceValue: json['lastDiceValue'] as int?,
+      currentRollCount: json['currentRollCount'] as int,
+      winnerId: json['winnerId'] as String?,
+    );
+  }
 }

@@ -4,6 +4,7 @@ import '../services/game_service.dart';
 import '../services/save_load_service.dart';
 import '../services/audio_service.dart';
 import '../services/statistics_service.dart'; // Import StatisticsService
+import 'dart:math';
 
 class GameProvider extends ChangeNotifier {
   GameState _gameState;
@@ -11,7 +12,7 @@ class GameProvider extends ChangeNotifier {
   final SaveLoadService _saveLoadService = SaveLoadService();
   final AudioService _audioService = AudioService();
   final StatisticsService _statisticsService = StatisticsService(); // Add StatisticsService instance
-  bool _isAnimating = false; // For pawn movement animation primarily
+  bool isAnimating = false; // Made public, removed unnecessary_getters_setters
 
   // Capture effect state
   bool _showCaptureEffect = false;
@@ -36,7 +37,7 @@ class GameProvider extends ChangeNotifier {
   }
   
   GameState get gameState => _gameState;
-  bool get isAnimating => _isAnimating; // For pawn movement
+  // bool get isAnimating => _isAnimating; // Removed getter
 
   // Getters for capture effect
   bool get showCaptureEffect => _showCaptureEffect;
@@ -65,16 +66,11 @@ class GameProvider extends ChangeNotifier {
     _reachedHomeTokenIndex = null;
   }
   
-  set isAnimating(bool value) { // Setter for GameScreen to control general animation blocking
-    _isAnimating = value;
-    // notifyListeners(); // Avoid notifying if this is set frequently during animation setup
-  }
-
   /// Würfelt und aktualisiert den Spielzustand
   Future<int> rollDice() async {
-    if (_isAnimating) return 0;
+    if (isAnimating) return 0; // Use public field
     
-    _isAnimating = true;
+    isAnimating = true; // Use public field
     notifyListeners();
     
     // Würfelanimation simulieren
@@ -84,7 +80,7 @@ class GameProvider extends ChangeNotifier {
     await _audioService.playDiceSound();
     
     final result = _gameService.rollDice();
-    _isAnimating = false;
+    isAnimating = false; // Use public field
     
     if (result == 6) {
       await _statisticsService.incrementSixesRolled(_gameState.currentPlayer.name);
@@ -102,15 +98,16 @@ class GameProvider extends ChangeNotifier {
       _isAiThinking = false;
       notifyListeners();
     }
+    _handlePotentialAIMove(); // Call AI move handler after dice roll & notify
     
     return result;
   }
   
   /// Bewegt eine Spielfigur und aktualisiert Statistiken
   Future<void> moveToken(int tokenIndex, int targetPosition) async {
-    if (_isAnimating) return;
+    if (isAnimating) return; // Use public field
     
-    _isAnimating = true;
+    isAnimating = true; // Use public field
     // notifyListeners(); // Notifying immediately might be too early if isAnimating is used to block UI before animation setup.
                         // GameScreen sets isAnimating true again in _initiatePawnAnimation.
 
@@ -148,6 +145,7 @@ class GameProvider extends ChangeNotifier {
     
     // _isAnimating is set to false by GameScreen's pawn animation completion.
     notifyListeners();
+    _handlePotentialAIMove(); // Call AI move handler after token move & notify
   }
   
   /// Gibt mögliche Züge für den aktuellen Spieler zurück
@@ -204,7 +202,7 @@ class GameProvider extends ChangeNotifier {
     // Record game played for all players
     final playerNames = players.map((p) => p.name).toList();
     _statisticsService.recordGamePlayed(playerNames).catchError((e) {
-        print("Error recording game played stats: $e");
+        // print("Error recording game played stats: $e"); // Removed avoid_print
     }); // Log error, don't block UI
 
     notifyListeners();
@@ -245,5 +243,19 @@ class GameProvider extends ChangeNotifier {
   void dispose() {
     _audioService.dispose();
     super.dispose();
+  }
+
+  void _handlePotentialAIMove() {
+    if (gameState.isCurrentPlayerAI && !gameState.isGameOver) {
+      // Add a small delay for AI moves to make them feel more natural
+      Future.delayed(Duration(milliseconds: 500 + Random().nextInt(1000)), () {
+        if (gameState.isCurrentPlayerAI && !gameState.isGameOver && !isAnimating) {
+          // print('[GameProvider] AI is making a move for player: ${gameState.currentTurnPlayerId}');
+          _gameService.makeAIMove();
+          notifyListeners();
+          _handlePotentialAIMove(); // Check again in case of consecutive AI turns or sixes
+        }
+      });
+    }
   }
 }

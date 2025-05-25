@@ -174,7 +174,8 @@ void main() {
         
         final tokenIndexToMove = moveOutOfBase['tokenIndex']!;
         // moveToken returns bool for capture, not general success.
-        final bool captureOccurred = gameService.moveToken('player1', tokenIndexToMove, startIndices['player1']!);
+        final String? capturedId = gameService.moveToken('player1', tokenIndexToMove, startIndices['player1']!);
+        final bool captureOccurred = capturedId != null;
         
         expect(captureOccurred, isFalse); // No capture when moving from base
         expect(gameState.players.firstWhere((p) => p.id == 'player1').tokenPositions[tokenIndexToMove], startIndices['player1']!);
@@ -205,7 +206,8 @@ void main() {
         
         // Simulate that a 3 was just rolled. If it's not a 6, rollDice calls _endTurn if moves are possible.
         // So after this move, currentRollCount should be 0 and lastDiceValue null.
-        final bool captureOccurred = gameService.moveToken('player1', 0, 8); // 5 + 3 = 8
+        final String? capturedIdPawnMoves = gameService.moveToken('player1', 0, 8); // 5 + 3 = 8
+        final bool captureOccurred = capturedIdPawnMoves != null;
         
         expect(captureOccurred, isFalse); 
         expect(gameState.players.first.tokenPositions[0], 8);
@@ -228,7 +230,8 @@ void main() {
         gameState.currentRollCount = 1; 
         gameService = GameService(gameState);
 
-        final bool captureOccurred = gameService.moveToken('player1', 0, 8);
+        final String? capturedIdPawnCaptures = gameService.moveToken('player1', 0, 8);
+        final bool captureOccurred = capturedIdPawnCaptures != null;
         
         expect(captureOccurred, isTrue);
         expect(gameState.players.firstWhere((p) => p.id == 'player1').tokenPositions[0], 8);
@@ -259,7 +262,8 @@ void main() {
         // Verify field 10 is a safe spot
         expect(gameState.isSafeField(p2Start, 'player1'), isTrue);
 
-        final bool captureOccurred = gameService.moveToken('player1', 0, p2Start);
+        final String? capturedIdSafeSpot = gameService.moveToken('player1', 0, p2Start);
+        final bool captureOccurred = capturedIdSafeSpot != null;
         
         expect(captureOccurred, isFalse); 
         expect(gameState.players.firstWhere((p) => p.id == 'player1').tokenPositions[0], p2Start);

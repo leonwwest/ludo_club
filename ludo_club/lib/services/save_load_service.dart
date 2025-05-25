@@ -11,26 +11,20 @@ class SaveLoadService {
     try {
       final prefs = await SharedPreferences.getInstance();
       
-      // Erstelle einen Namen für den Spielstand basierend auf Datum und Uhrzeit
       final now = DateTime.now();
       final formatter = DateFormat('dd.MM.yyyy HH:mm');
       final saveName = customName ?? 'Spielstand vom ${formatter.format(now)}';
       
-      // Konvertiere den GameState in ein JSON-Objekt
       final gameJson = _gameStateToJson(gameState);
       gameJson['saveName'] = saveName;
       gameJson['saveDate'] = now.millisecondsSinceEpoch;
       
-      // Hole die bestehende Liste der gespeicherten Spiele
       final List<String> savedGames = prefs.getStringList(_savedGamesKey) ?? [];
       
-      // Füge den neuen Spielstand hinzu
       savedGames.add(jsonEncode(gameJson));
       
-      // Speichere die aktualisierte Liste
       return await prefs.setStringList(_savedGamesKey, savedGames);
     } catch (e) {
-      print('Fehler beim Speichern des Spiels: $e');
       return false;
     }
   }
@@ -48,7 +42,6 @@ class SaveLoadService {
       final gameJson = jsonDecode(savedGames[index]) as Map<String, dynamic>;
       return _jsonToGameState(gameJson);
     } catch (e) {
-      print('Fehler beim Laden des Spiels: $e');
       return null;
     }
   }
@@ -66,7 +59,6 @@ class SaveLoadService {
       savedGames.removeAt(index);
       return await prefs.setStringList(_savedGamesKey, savedGames);
     } catch (e) {
-      print('Fehler beim Löschen des Spiels: $e');
       return false;
     }
   }
@@ -85,7 +77,6 @@ class SaveLoadService {
         };
       }).toList();
     } catch (e) {
-      print('Fehler beim Abrufen der gespeicherten Spiele: $e');
       return [];
     }
   }

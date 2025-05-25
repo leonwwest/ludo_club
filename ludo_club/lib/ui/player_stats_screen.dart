@@ -50,7 +50,7 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
     ) ?? false; // If dialog is dismissed, consider it as false
 
     if (confirmReset) {
-      await _statisticsService.resetAllStats();
+      await _statisticsService.resetAllStatistics();
       _loadStats(); // Refresh the list
     }
   }
@@ -75,12 +75,11 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           } else if (snapshot.hasError) {
-            print('Error loading statistics: ${snapshot.error}');
-            return Center(child: Text('Error loading statistics: ${snapshot.error}'));
+            return Center(child: Text('Error: ${snapshot.error}'));
           } else if (snapshot.hasData) {
             final List<PlayerStats> statsList = snapshot.data!;
             if (statsList.isEmpty) {
-              return const Center(child: Text('No statistics available yet. Play some games!'));
+              return const Center(child: Text('Noch keine Statistiken vorhanden.'));
             }
             return ListView.builder(
               itemCount: statsList.length,

@@ -23,8 +23,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   String? _animatingPlayerId;
   int? _animatingTokenIndex;
   Offset? _animationCurrentOffset;
-  // Temporary storage for move details during animation
-  int? _actualPlayerIdForMove;
+  String? _actualPlayerIdForMove;
   int? _actualTokenIndexForMove;
   int? _actualTargetLogicalPosition;
 
@@ -33,16 +32,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   late Animation<double> _captureSparkleAnimation;
   Offset? _captureEffectScreenPosition;
   bool _isCaptureAnimating = false;
-  Color _effectColor = Colors.orangeAccent; // Default color for sparkle
+  Color _effectColor = Colors.orangeAccent;
 
   // Reached Home Animation
   late AnimationController _reachedHomeAnimationController;
   late Animation<double> _reachedHomeShineAnimation;
   Offset? _reachedHomeEffectScreenPosition;
   bool _isReachedHomeAnimating = false;
-  String? _reachedHomeAnimatingPlayerId;
-  int? _reachedHomeAnimatingTokenIndex;
-  Color _reachedHomeEffectColor = Colors.amber; // Color for home shine
+  Color _reachedHomeEffectColor = Colors.amber;
 
 
   @override
@@ -79,16 +76,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     });
 
     _pawnAnimationController.addStatusListener((status) {
+      if (!mounted) return;
       if (status == AnimationStatus.completed) {
         final gameProvider = Provider.of<GameProvider>(context, listen: false);
         if (_actualPlayerIdForMove != null && _actualTokenIndexForMove != null && _actualTargetLogicalPosition != null) {
           gameProvider.moveToken(_actualTokenIndexForMove!, _actualTargetLogicalPosition!)
-            .then((bool captureOccurred) { 
-              if (captureOccurred && gameProvider.showCaptureEffect) {
+            .then((_) {
+              if (!mounted) return;
+              if (gameProvider.showCaptureEffect) {
                 _startCaptureAnimation(gameProvider);
               }
-              // Now check for reached home effect, independent of capture
-              if (gameProvider.showReachedHomeEffect && 
+              if (gameProvider.showReachedHomeEffect &&
                   gameProvider.reachedHomePlayerId == _actualPlayerIdForMove &&
                   gameProvider.reachedHomeTokenIndex == _actualTokenIndexForMove) {
                 _startReachedHomeAnimation(gameProvider, _actualPlayerIdForMove!, _actualTokenIndexForMove!);
@@ -102,11 +100,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           _actualPlayerIdForMove = null;
           _actualTokenIndexForMove = null;
           _actualTargetLogicalPosition = null;
-          gameProvider.isAnimating = false; 
+          if (gameProvider.isAnimating) {
+             gameProvider.isAnimating = false;
+          }
         });
       } else if (status == AnimationStatus.dismissed) {
+        if (!mounted) return;
         final gameProvider = Provider.of<GameProvider>(context, listen: false);
-         setState(() {
+        setState(() {
           _animatingPlayerId = null;
           _animatingTokenIndex = null;
           _animationCurrentOffset = null;
@@ -134,6 +135,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     });
     _captureAnimationController.addStatusListener((status) {
+      if (!mounted) return;
       if (status == AnimationStatus.completed) {
         setState(() { _isCaptureAnimating = false; _captureEffectScreenPosition = null; });
         Provider.of<GameProvider>(context, listen: false).clearCaptureEffect();
@@ -157,11 +159,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       }
     });
     _reachedHomeAnimationController.addStatusListener((status) {
+      if (!mounted) return;
       if (status == AnimationStatus.completed) {
-        setState(() { _isReachedHomeAnimating = false; _reachedHomeEffectScreenPosition = null; _reachedHomeAnimatingPlayerId = null; _reachedHomeAnimatingTokenIndex = null; });
+        setState(() { _isReachedHomeAnimating = false; _reachedHomeEffectScreenPosition = null; });
         Provider.of<GameProvider>(context, listen: false).clearReachedHomeEffect();
       } else if (status == AnimationStatus.dismissed) {
-        setState(() { _isReachedHomeAnimating = false; _reachedHomeEffectScreenPosition = null; _reachedHomeAnimatingPlayerId = null; _reachedHomeAnimatingTokenIndex = null; });
+        setState(() { _isReachedHomeAnimating = false; _reachedHomeEffectScreenPosition = null; });
         Provider.of<GameProvider>(context, listen: false).clearReachedHomeEffect();
       }
     });
@@ -203,20 +206,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         ? renderBox!.size.width
         : MediaQuery.of(context).size.width - 32;
 
-    _reachedHomeEffectColor = _getPlayerColor(playerId); // Color based on player
+    _reachedHomeEffectColor = _getPlayerColor(playerId);
 
-    // The effect should be at the finished position of this specific token
     _reachedHomeEffectScreenPosition = _getOffsetForLogicalPosition(
         playerId,
-        tokenIndex, // Use the actual token index
-        GameState.finishedPosition, // Logical position is always 'finished'
+        tokenIndex,
+        GameState.finishedPosition,
         boardSize,
         gameProvider.gameState);
     
     setState(() {
       _isReachedHomeAnimating = true;
-      _reachedHomeAnimatingPlayerId = playerId;
-      _reachedHomeAnimatingTokenIndex = tokenIndex;
     });
     _reachedHomeAnimationController.forward(from: 0.0);
   }
@@ -252,6 +252,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           if (gameState.isGameOver && !_winnerDialogShown) {
             // Verzögerung für eine bessere Benutzererfahrung
             Future.delayed(const Duration(milliseconds: 500), () {
+              if (!mounted) return;
               _showWinnerDialog(gameState.winner!);
             });
             _winnerDialogShown = true;
@@ -404,7 +405,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                                   borderRadius: BorderRadius.circular(16),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.2),
+                                      color: Colors.black.withAlpha((255 * 0.2).round()),
                                       blurRadius: 5,
                                       offset: const Offset(0, 3),
                                     ),
@@ -506,7 +507,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     width: fieldSize,
                     height: fieldSize,
                     decoration: BoxDecoration(
-                      color: Colors.yellow.withOpacity(0.5),
+                      color: Colors.yellow.withAlpha((255 * 0.5).round()),
                       border: Border.all(
                         color: Colors.orange,
                         width: 2,
@@ -600,74 +601,41 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
   
-  // Erzeugt eine Spielfigur im Heimatfeld
-  Widget _buildHomePiece(Player player, int pieceIndex, double boardSize, double fieldSize, 
-                         GameProvider gameProvider, List<int> possibleMoves, GameState gameState) {
-    final playerColor = _getPlayerColor(player.id);
-    final positions = _getHomeFieldPositions(player.id, boardSize, fieldSize);
-    final pos = positions[pieceIndex];
-    final isHighlighted = possibleMoves.contains(gameState.startIndex[player.id]) && 
-                          gameProvider.gameState.lastDiceValue == 6;
-    
-    return Positioned(
-      left: pos.dx - fieldSize / 2,
-      top: pos.dy - fieldSize / 2,
-      child: GestureDetector(
-        onTap: isHighlighted ? () => _moveToken(gameProvider, pieceIndex, gameState.startIndex[player.id]!) : null,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          width: fieldSize,
-          height: fieldSize,
-          decoration: BoxDecoration(
-            color: isHighlighted ? Colors.yellow.withOpacity(0.3) : Colors.transparent,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: isHighlighted ? Colors.orange : Colors.transparent,
-              width: 2,
-            ),
-          ),
-          child: CustomPaint(
-            painter: PiecePainter(color: playerColor),
-          ),
-        ),
-      ),
-    );
-  }
-  
   // Berechnet die Positionen für die 4 Figuren im Heimatfeld eines Spielers
-  List<Offset> _getHomeFieldPositions(String playerId, double boardSize, double fieldSize) {
-    final positions = <Offset>[];
-    final spacing = fieldSize * 2;
+  // Removed unused method _getHomeFieldPositions
+  // List<Offset> _getHomeFieldPositions(String playerId, double boardSize, double fieldSize) {
+  //   final positions = <Offset>[];
+  //   final spacing = fieldSize * 2;
     
-    switch (playerId) {
-      case 'player1': // Gelb (oben links)
-        positions.add(Offset(2 * fieldSize, 2 * fieldSize));
-        positions.add(Offset(2 * fieldSize + spacing, 2 * fieldSize));
-        positions.add(Offset(2 * fieldSize, 2 * fieldSize + spacing));
-        positions.add(Offset(2 * fieldSize + spacing, 2 * fieldSize + spacing));
-        break;
-      case 'player2': // Blau (oben rechts)
-        positions.add(Offset(11 * fieldSize, 2 * fieldSize));
-        positions.add(Offset(11 * fieldSize + spacing, 2 * fieldSize));
-        positions.add(Offset(11 * fieldSize, 2 * fieldSize + spacing));
-        positions.add(Offset(11 * fieldSize + spacing, 2 * fieldSize + spacing));
-        break;
-      case 'player3': // Grün (unten links)
-        positions.add(Offset(2 * fieldSize, 11 * fieldSize));
-        positions.add(Offset(2 * fieldSize + spacing, 11 * fieldSize));
-        positions.add(Offset(2 * fieldSize, 11 * fieldSize + spacing));
-        positions.add(Offset(2 * fieldSize + spacing, 11 * fieldSize + spacing));
-        break;
-      case 'player4': // Rot (unten rechts)
-        positions.add(Offset(11 * fieldSize, 11 * fieldSize));
-        positions.add(Offset(11 * fieldSize + spacing, 11 * fieldSize));
-        positions.add(Offset(11 * fieldSize, 11 * fieldSize + spacing));
-        positions.add(Offset(11 * fieldSize + spacing, 11 * fieldSize + spacing));
-        break;
-    }
+  //   switch (playerId) {
+  //     case 'player1': // Gelb (oben links)
+  //       positions.add(Offset(2 * fieldSize, 2 * fieldSize));
+  //       positions.add(Offset(2 * fieldSize + spacing, 2 * fieldSize));
+  //       positions.add(Offset(2 * fieldSize, 2 * fieldSize + spacing));
+  //       positions.add(Offset(2 * fieldSize + spacing, 2 * fieldSize + spacing));
+  //       break;
+  //     case 'player2': // Blau (oben rechts)
+  //       positions.add(Offset(11 * fieldSize, 2 * fieldSize));
+  //       positions.add(Offset(11 * fieldSize + spacing, 2 * fieldSize));
+  //       positions.add(Offset(11 * fieldSize, 2 * fieldSize + spacing));
+  //       positions.add(Offset(11 * fieldSize + spacing, 2 * fieldSize + spacing));
+  //       break;
+  //     case 'player3': // Grün (unten links)
+  //       positions.add(Offset(2 * fieldSize, 11 * fieldSize));
+  //       positions.add(Offset(2 * fieldSize + spacing, 11 * fieldSize));
+  //       positions.add(Offset(2 * fieldSize, 11 * fieldSize + spacing));
+  //       positions.add(Offset(2 * fieldSize + spacing, 11 * fieldSize + spacing));
+  //       break;
+  //     case 'player4': // Rot (unten rechts)
+  //       positions.add(Offset(11 * fieldSize, 11 * fieldSize));
+  //       positions.add(Offset(11 * fieldSize + spacing, 11 * fieldSize));
+  //       positions.add(Offset(11 * fieldSize, 11 * fieldSize + spacing));
+  //       positions.add(Offset(11 * fieldSize + spacing, 11 * fieldSize + spacing));
+  //       break;
+  //   }
     
-    return positions;
-  }
+  //   return positions;
+  // }
 
   // Baut eine einzelne Spielfigur
   Widget _buildToken(Player player, int tokenIndex, Offset position, double fieldSize, GameProvider gameProvider, GameState gameState, double boardSize) {
@@ -683,7 +651,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       top: position.dy - fieldSize / 2,
       child: GestureDetector(
         onTap: canBeMoved && !gameProvider.isAnimating
-          ? () => _showMoveOptions(gameProvider, player.id, tokenIndex, gameState, boardSize) // boardSize already passed
+          ? () {
+              _showMoveOptions(gameProvider, player.id, tokenIndex, gameState, boardSize); 
+            }
           : null,
         child: Container(
           width: fieldSize,
@@ -697,7 +667,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withAlpha((255 * 0.3).round()),
                 blurRadius: 3,
                 offset: const Offset(0, 2),
               ),
@@ -730,10 +700,54 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         
     if (moveDetailsForThisToken.isEmpty) return;
     
+    // TODO: Handle cases where a token has multiple move options (e.g., choice of path at junction)
+    // For now, taking the first valid move.
     final targetLogicalPosition = moveDetailsForThisToken[0]['targetPosition']!;
     
     // Pass boardSize to _initiatePawnAnimation
     _initiatePawnAnimation(gameProvider, playerId, tokenIndex, targetLogicalPosition, boardSize);
+  }
+
+  // ADDED METHOD
+  void _initiatePawnAnimation(GameProvider gameProvider, String playerId, int tokenIndex, int targetLogicalPosition, double boardSize) {
+    if (gameProvider.isAnimating) {
+      return;
+    }
+
+    final gameState = gameProvider.gameState;
+    // Find the current logical position of the token to be moved
+    final playerState = gameState.players.firstWhere((p) => p.id == playerId);
+    final currentLogicalPosition = playerState.tokenPositions[tokenIndex];
+
+    // Get start and end screen positions using the boardSize passed or calculated
+    final Offset startOffset = _getOffsetForLogicalPosition(playerId, tokenIndex, currentLogicalPosition, boardSize, gameState);
+    final Offset endOffset = _getOffsetForLogicalPosition(playerId, tokenIndex, targetLogicalPosition, boardSize, gameState);
+
+    if (startOffset == endOffset) {
+      if (currentLogicalPosition == targetLogicalPosition) {
+        // If currentLogicalPosition is already targetLogicalPosition, it might be an issue with move generation
+        // or the piece is already at the target.
+      }
+    }
+
+    // Store details for when animation completes and actual move is made in GameProvider
+    _actualPlayerIdForMove = playerId;
+    _actualTokenIndexForMove = tokenIndex;
+    _actualTargetLogicalPosition = targetLogicalPosition;
+
+    // Set details for current animation rendering
+    _animatingPlayerId = playerId;
+    _animatingTokenIndex = tokenIndex;
+    _animationCurrentOffset = startOffset; // Initialize with start position for the first frame
+
+    _pawnAnimation = Tween<Offset>(begin: startOffset, end: endOffset).animate(
+      CurvedAnimation(parent: _pawnAnimationController, curve: Curves.easeInOut),
+    );
+
+    setState(() {
+      gameProvider.isAnimating = true; // Block other actions during animation
+    });
+    _pawnAnimationController.forward(from: 0.0); // Start the animation
   }
 
   // Helper to get screen offset for any logical game position
@@ -945,42 +959,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     });
   }
 
-  // Initiates pawn animation and then calls GameProvider's moveToken upon completion
-  Future<void> _initiatePawnAnimation(GameProvider gameProvider, String playerId, int tokenIndex, int targetLogicalPosition, double boardSize) async {
-    if (gameProvider.isAnimating) return;
-
-    final gameState = gameProvider.gameState;
-    final player = gameState.players.firstWhere((p) => p.id == playerId);
-    final currentLogicalPos = player.tokenPositions[tokenIndex];
-    
-    // boardSize is now passed as a parameter
-
-    _actualPlayerIdForMove = playerId;
-    _actualTokenIndexForMove = tokenIndex;
-    _actualTargetLogicalPosition = targetLogicalPosition;
-
-    setState(() {
-      gameProvider.isAnimating = true;
-      _animatingPlayerId = playerId;
-      _animatingTokenIndex = tokenIndex;
-      
-      Offset startOffset = _getOffsetForLogicalPosition(playerId, tokenIndex, currentLogicalPos, boardSize, gameState);
-      Offset endOffset = _getOffsetForLogicalPosition(playerId, tokenIndex, targetLogicalPosition, boardSize, gameState);
-
-      _pawnAnimation = Tween<Offset>(
-        begin: startOffset,
-        end: endOffset,
-      ).animate(CurvedAnimation(
-        parent: _pawnAnimationController,
-        curve: Curves.easeInOut,
-      ));
-      _animationCurrentOffset = startOffset; 
-    });
-
-    _pawnAnimationController.forward(from: 0.0);
-  }
-
-
   // Zeigt den Gewinnbildschirm als Dialog an
   void _showWinnerDialog(Player winner) {
     final playerColor = _getPlayerColor(winner.id);
@@ -1007,7 +985,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   border: Border.all(color: Colors.white, width: 3),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withAlpha((255 * 0.3).round()),
                       blurRadius: 5,
                       offset: const Offset(0, 3),
                     ),
@@ -1130,6 +1108,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 final gameProvider = Provider.of<GameProvider>(context, listen: false);
                 final success = await gameProvider.saveGame(customName: customName);
                 
+                if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
@@ -1308,7 +1287,7 @@ class GameBoardPainter extends CustomPainter {
       canvas.drawCircle(
         Offset(centerX, centerY),
         cellSize * 1, // 2×2 Kreis (Durchmesser)
-        Paint()..color = color.withOpacity(0.3)
+        Paint()..color = color.withAlpha((255 * 0.3).round())
       );
     }
     
@@ -1401,16 +1380,16 @@ class GameBoardPainter extends CustomPainter {
     
     // Zeichne Sternsymbole für sichere Felder (Startfelder und Mittelpunkte)
     // Startfelder
-    _drawStar(canvas, 1 * cellSize, 7 * cellSize, cellSize * 0.4, Paint()..color = Colors.black.withOpacity(0.7)); // Grün
-    _drawStar(canvas, 8 * cellSize, 1 * cellSize, cellSize * 0.4, Paint()..color = Colors.black.withOpacity(0.7)); // Gelb
-    _drawStar(canvas, 13 * cellSize, 7 * cellSize, cellSize * 0.4, Paint()..color = Colors.black.withOpacity(0.7)); // Blau
-    _drawStar(canvas, 7 * cellSize, 13 * cellSize, cellSize * 0.4, Paint()..color = Colors.black.withOpacity(0.7)); // Rot
+    _drawStar(canvas, 1 * cellSize, 7 * cellSize, cellSize * 0.4, Paint()..color = Colors.black.withAlpha((255 * 0.7).round()));
+    _drawStar(canvas, 8 * cellSize, 1 * cellSize, cellSize * 0.4, Paint()..color = Colors.black.withAlpha((255 * 0.7).round()));
+    _drawStar(canvas, 13 * cellSize, 7 * cellSize, cellSize * 0.4, Paint()..color = Colors.black.withAlpha((255 * 0.7).round()));
+    _drawStar(canvas, 7 * cellSize, 13 * cellSize, cellSize * 0.4, Paint()..color = Colors.black.withAlpha((255 * 0.7).round()));
     
     // Mittelpunktfelder in jedem Quadranten
-    _drawStar(canvas, 3 * cellSize, 7 * cellSize, cellSize * 0.4, Paint()..color = Colors.black.withOpacity(0.7));
-    _drawStar(canvas, 7 * cellSize, 3 * cellSize, cellSize * 0.4, Paint()..color = Colors.black.withOpacity(0.7));
-    _drawStar(canvas, 11 * cellSize, 7 * cellSize, cellSize * 0.4, Paint()..color = Colors.black.withOpacity(0.7));
-    _drawStar(canvas, 7 * cellSize, 11 * cellSize, cellSize * 0.4, Paint()..color = Colors.black.withOpacity(0.7));
+    _drawStar(canvas, 3 * cellSize, 7 * cellSize, cellSize * 0.4, Paint()..color = Colors.black.withAlpha((255 * 0.7).round()));
+    _drawStar(canvas, 7 * cellSize, 3 * cellSize, cellSize * 0.4, Paint()..color = Colors.black.withAlpha((255 * 0.7).round()));
+    _drawStar(canvas, 11 * cellSize, 7 * cellSize, cellSize * 0.4, Paint()..color = Colors.black.withAlpha((255 * 0.7).round()));
+    _drawStar(canvas, 7 * cellSize, 11 * cellSize, cellSize * 0.4, Paint()..color = Colors.black.withAlpha((255 * 0.7).round()));
   }
   
   // Hilfsmethode zum Zeichnen eines einzelnen Spurabschnitts
@@ -1451,8 +1430,8 @@ class GameBoardPainter extends CustomPainter {
   
   void _drawStar(Canvas canvas, double x, double y, double radius, Paint paint) {
     final path = Path();
-    final double rotation = -pi / 2;
-    final int points = 5;
+    const double rotation = -pi / 2;
+    const int points = 5;
     
     for (int i = 0; i < points * 2; i++) {
       final double r = (i % 2 == 0) ? radius : radius * 0.4;
@@ -1512,7 +1491,7 @@ class CaptureEffectPainter extends CustomPainter {
       double particleRadius = (size.width / 15) * (1.0 - progress); // Particles shrink
       if (particleRadius < 0) particleRadius = 0;
 
-      paint.color = color.withOpacity(max(0, 1.0 - progress * 1.5)); // Fade out
+      paint.color = color.withAlpha((255 * max(0, 1.0 - progress * 1.5)).round()); // Replaced withOpacity // Fade out
 
       canvas.drawCircle(
         particleOffset,
@@ -1546,13 +1525,13 @@ class ReachedHomeEffectPainter extends CustomPainter {
 
     // Outer glow: expands and fades
     double maxGlowRadius = size.width * 0.8; // Max glow size relative to token
-    paint.color = color.withOpacity(max(0, 0.5 - (progress * 0.5))); // Fades out
+    paint.color = color.withAlpha((255 * max(0, 0.5 - (progress * 0.5)).round())); // Replaced withOpacity // Fades out
     paint.style = PaintingStyle.fill;
     canvas.drawCircle(center, maxGlowRadius * progress, paint);
 
     // Inner shine: a smaller, brighter pulse
     double maxShineRadius = size.width * 0.5;
-    paint.color = Colors.white.withOpacity(max(0, 0.7 - (progress * 0.7))); // Fades out faster
+    paint.color = Colors.white.withAlpha((255 * max(0, 0.7 - (progress * 0.7)).round())); // Replaced withOpacity // Fades out faster
     canvas.drawCircle(center, maxShineRadius * progress, paint);
   }
 
@@ -1591,7 +1570,7 @@ class PiecePainter extends CustomPainter {
     canvas.drawPath(
       shadowPath,
       Paint()
-        ..color = Colors.black.withOpacity(0.3)
+        ..color = Colors.black.withAlpha((255 * 0.3).round())
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
     );
     
@@ -1616,7 +1595,7 @@ class PiecePainter extends CustomPainter {
     
     // Highlight für 3D-Effekt
     final highlightPaint = Paint()
-      ..color = Colors.white.withOpacity(0.3)
+      ..color = Colors.white.withAlpha((255 * 0.3).round())
       ..style = PaintingStyle.fill;
     
     final highlightPath = Path()

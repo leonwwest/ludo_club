@@ -18,6 +18,25 @@ class PlayerStats {
     this.sixesRolled = 0,
   });
 
+  // Method to create a copy with updated values
+  PlayerStats copyWith({
+    String? playerName,
+    int? gamesPlayed,
+    int? gamesWon,
+    int? pawnsCaptured,
+    int? pawnsLost,
+    int? sixesRolled,
+  }) {
+    return PlayerStats(
+      playerName: playerName ?? this.playerName,
+      gamesPlayed: gamesPlayed ?? this.gamesPlayed,
+      gamesWon: gamesWon ?? this.gamesWon,
+      pawnsCaptured: pawnsCaptured ?? this.pawnsCaptured,
+      pawnsLost: pawnsLost ?? this.pawnsLost,
+      sixesRolled: sixesRolled ?? this.sixesRolled,
+    );
+  }
+
   // Factory constructor to create PlayerStats from JSON
   // playerName is passed separately as it's not in the JSON map itself but used as a key.
   factory PlayerStats.fromJson(String playerName, Map<String, dynamic> json) {
@@ -68,28 +87,15 @@ class StatisticsService {
     if (statsJson != null && statsJson.isNotEmpty) {
       try {
         final Map<String, dynamic> jsonMap = jsonDecode(statsJson) as Map<String, dynamic>;
-        // When loading, use the original playerName for display, not the normalized one.
-        // However, we need to retrieve the *original* display name that was saved.
-        // This implies that when we save, we should perhaps store the display name along with the stats,
-        // or use the list from _playerStatsListKey to find the canonical display name.
-        // For now, let's assume the passed 'playerName' is the desired display name if creating new.
-        // If loading, we should try to get the canonical display name.
-        
-        // Correct approach: The list _playerStatsListKey stores the canonical display names.
-        // When getPlayerStats("alice") is called, we should find "Alice" from the list if "alice" matches.
         final displayPlayerName = await _getDisplayPlayerName(playerName) ?? playerName;
 
         return PlayerStats.fromJson(displayPlayerName, jsonMap);
       } catch (e) {
         // Handle potential parsing errors, corruption etc.
-        print("Error decoding stats for $playerName: $e. Returning fresh stats.");
-        // Fall through to return new stats, but use the potentially canonical name
         final displayPlayerName = await _getDisplayPlayerName(playerName) ?? playerName;
         return PlayerStats(playerName: displayPlayerName);
       }
     } else {
-      // If no stats exist, return new stats, ensuring the passed playerName is used for display.
-      // No need to call _getDisplayPlayerName if we are creating new, use the name as provided.
       return PlayerStats(playerName: playerName.trim());
     }
   }
@@ -178,17 +184,17 @@ class StatisticsService {
   
   Future<void> recordGamePlayed(List<String> playerNames) async {
     for (String name in playerNames) {
-      await incrementGamesPlayed(name);
+      PlayerStats stats = await getPlayerStats(name); 
+      stats.gamesPlayed = stats.gamesPlayed + 1;
+      await _savePlayerStats(stats.playerName, stats); // Use stats.playerName as it's canonical
     }
   }
 
-  Future<void> resetAllStats() async {
-    final prefs = await _prefs;
-    final List<String> playerDisplayNames = prefs.getStringList(_playerStatsListKey) ?? [];
-
-    for (String displayName in playerDisplayNames) {
-      await prefs.remove(_playerStatsKey(displayName)); // Key uses normalized name
+  Future<void> resetAllStatistics() async {
+    final prefs = await SharedPreferences.getInstance();
+    final List<String> allPlayerStatsKeys = prefs.getKeys().where((key) => key.startsWith('playerStats_')).toList();
+    for (String key in allPlayerStatsKeys) {
+      await prefs.remove(key);
     }
-    await prefs.remove(_playerStatsListKey);
   }
 }
