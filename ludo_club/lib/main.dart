@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'ui/home_screen.dart';
 import 'providers/game_provider.dart';
 import 'models/game_state.dart';
+import 'logic/ludo_game_logic.dart';
 
 void main() {
   runApp(const MyApp());
@@ -16,19 +17,13 @@ class MyApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (context) => GameProvider(
         GameState(
-          startIndex: {
-            'player1': 0,   // Gelb (oben)
-            'player2': 10,  // Blau (rechts) 
-            'player3': 20,  // Grün (unten)
-            'player4': 30,  // Rot (links)
-          },
           players: [
-            Player('player1', 'Gelb'),
-            Player('player2', 'Blau', isAI: true),
-            Player('player3', 'Grün', isAI: true),
-            Player('player4', 'Rot', isAI: true),
+            Player(PlayerColor.red, 'Red', isAI: false), // Human player
+            Player(PlayerColor.green, 'Green', isAI: true),
+            Player(PlayerColor.blue, 'Blue', isAI: true),
+            Player(PlayerColor.yellow, 'Yellow', isAI: true),
           ],
-          currentTurnPlayerId: 'player1',
+          currentTurnPlayerId: PlayerColor.red,
         ),
       ),
       child: MaterialApp(
