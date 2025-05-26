@@ -2,7 +2,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_provider.dart';
-import '../models/game_state.dart';
+import '../models/game_state.dart'; // Will be less used directly
+import '../logic/ludo_game_logic.dart'; // Added
 
 class GameScreen extends StatefulWidget {
   const GameScreen({Key? key}) : super(key: key);
@@ -14,18 +15,25 @@ class GameScreen extends StatefulWidget {
 class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   late AnimationController _diceAnimationController;
   late Animation<double> _diceAnimation;
-  int _displayDiceValue = 1;
+  int _displayDiceValue = 1; // Will be driven by provider more
   bool _winnerDialogShown = false;
 
   // Pawn Animation
   late AnimationController _pawnAnimationController;
   late Animation<Offset> _pawnAnimation;
-  String? _animatingPlayerId;
-  int? _animatingTokenIndex;
+  Piece? _animatingPiece; // Added
+  PlayerColor? _animatingPlayerColor; // Changed from _animatingPlayerId (String?)
   Offset? _animationCurrentOffset;
+<<<<<<< HEAD
   String? _actualPlayerIdForMove;
   int? _actualTokenIndexForMove;
   int? _actualTargetLogicalPosition;
+=======
+  // Temporary storage for move details during animation
+  PlayerColor? _actualPlayerColorForMove; // Changed from _actualPlayerIdForMove (int?)
+  // _actualTokenIndexForMove and _actualTargetLogicalPosition might not be needed here if _animatingPiece is used
+  int? _actualTargetLogicalPosition; // Kept for now, might be replaced by targetPiece in animation
+>>>>>>> archive-ludo-logic-update
 
   // Capture Animation
   late AnimationController _captureAnimationController;
@@ -39,7 +47,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   late Animation<double> _reachedHomeShineAnimation;
   Offset? _reachedHomeEffectScreenPosition;
   bool _isReachedHomeAnimating = false;
+<<<<<<< HEAD
   Color _reachedHomeEffectColor = Colors.amber;
+=======
+  PlayerColor? _reachedHomeAnimatingPlayerColor; // Changed from String?
+  int? _reachedHomeAnimatingPieceId; // Changed from _reachedHomeAnimatingTokenIndex
+  Color _reachedHomeEffectColor = Colors.amber; // Color for home shine
+>>>>>>> archive-ludo-logic-update
 
 
   @override
@@ -54,6 +68,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       curve: Curves.easeInOut,
     );
     _diceAnimationController.addListener(() {
+      // This random dice display during animation might be removed or changed
+      // if the GameProvider.currentDiceValue is authoritative.
       if (_diceAnimationController.value > 0.5 && _diceAnimationController.value < 0.6) {
         setState(() {
           _displayDiceValue = Random().nextInt(6) + 1;
@@ -68,7 +84,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
 
     _pawnAnimationController.addListener(() {
-      if (_animatingPlayerId != null && _animatingTokenIndex != null) {
+      if (_animatingPiece != null) { // Check _animatingPiece
         setState(() {
           _animationCurrentOffset = _pawnAnimation.value;
         });
@@ -79,6 +95,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       if (!mounted) return;
       if (status == AnimationStatus.completed) {
         final gameProvider = Provider.of<GameProvider>(context, listen: false);
+<<<<<<< HEAD
         if (_actualPlayerIdForMove != null && _actualTokenIndexForMove != null && _actualTargetLogicalPosition != null) {
           gameProvider.moveToken(_actualTokenIndexForMove!, _actualTargetLogicalPosition!)
             .then((_) {
@@ -92,13 +109,18 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 _startReachedHomeAnimation(gameProvider, _actualPlayerIdForMove!, _actualTokenIndexForMove!);
               }
             });
+=======
+        if (_animatingPiece != null) {
+          // The actual move is now performed by GameProvider after animation.
+          // GameProvider's movePiece will update the state and set flags for effects.
+          gameProvider.movePiece(_animatingPiece!); 
+>>>>>>> archive-ludo-logic-update
         }
         setState(() {
-          _animatingPlayerId = null;
-          _animatingTokenIndex = null;
+          _animatingPiece = null;
+          _animatingPlayerColor = null;
           _animationCurrentOffset = null;
-          _actualPlayerIdForMove = null;
-          _actualTokenIndexForMove = null;
+          _actualPlayerColorForMove = null;
           _actualTargetLogicalPosition = null;
           if (gameProvider.isAnimating) {
              gameProvider.isAnimating = false;
@@ -107,12 +129,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       } else if (status == AnimationStatus.dismissed) {
         if (!mounted) return;
         final gameProvider = Provider.of<GameProvider>(context, listen: false);
+<<<<<<< HEAD
         setState(() {
           _animatingPlayerId = null;
           _animatingTokenIndex = null;
+=======
+         setState(() {
+          _animatingPiece = null;
+          _animatingPlayerColor = null;
+>>>>>>> archive-ludo-logic-update
           _animationCurrentOffset = null;
-          _actualPlayerIdForMove = null;
-          _actualTokenIndexForMove = null;
+          _actualPlayerColorForMove = null;
           _actualTargetLogicalPosition = null;
           if (gameProvider.isAnimating) {
             gameProvider.isAnimating = false;
@@ -161,10 +188,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _reachedHomeAnimationController.addStatusListener((status) {
       if (!mounted) return;
       if (status == AnimationStatus.completed) {
+<<<<<<< HEAD
         setState(() { _isReachedHomeAnimating = false; _reachedHomeEffectScreenPosition = null; });
         Provider.of<GameProvider>(context, listen: false).clearReachedHomeEffect();
       } else if (status == AnimationStatus.dismissed) {
         setState(() { _isReachedHomeAnimating = false; _reachedHomeEffectScreenPosition = null; });
+=======
+        setState(() { _isReachedHomeAnimating = false; _reachedHomeEffectScreenPosition = null; _reachedHomeAnimatingPlayerColor = null; _reachedHomeAnimatingPieceId = null; }); // Updated fields
+        Provider.of<GameProvider>(context, listen: false).clearReachedHomeEffect();
+      } else if (status == AnimationStatus.dismissed) {
+        setState(() { _isReachedHomeAnimating = false; _reachedHomeEffectScreenPosition = null; _reachedHomeAnimatingPlayerColor = null; _reachedHomeAnimatingPieceId = null; }); // Updated fields
+>>>>>>> archive-ludo-logic-update
         Provider.of<GameProvider>(context, listen: false).clearReachedHomeEffect();
       }
     });
@@ -179,27 +213,29 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  void _startCaptureAnimation(GameProvider gameProvider) {
-    if (gameProvider.captureEffectBoardIndex == null) return;
+  // _startCaptureAnimation and _startReachedHomeAnimation will be updated later
+  // to be triggered from build method based on provider flags.
+  // For now, their signatures might need adjustment if called directly.
 
-    final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
-    final double boardSize = renderBox?.hasSize == true 
-        ? renderBox!.size.width 
-        : MediaQuery.of(context).size.width - 32; 
-
-    _effectColor = Colors.orangeAccent; 
-
-    _captureEffectScreenPosition = _getOffsetForLogicalPosition(
-        gameProvider.gameState.currentTurnPlayerId, 
-        0, 
-        gameProvider.captureEffectBoardIndex!,
-        boardSize,
-        gameProvider.gameState);
-
-    setState(() { _isCaptureAnimating = true; });
-    _captureAnimationController.forward(from: 0.0);
+  void _startCaptureAnimation(GameProvider gameProvider, int boardIndex, double boardSize) {
+    // boardIndex is the global index where capture happened
+    // This will need _getOffsetForGlobalBoardIndex or similar
+    // Placeholder for now:
+    // _captureEffectScreenPosition = _getOffsetForGlobalBoardIndex(boardIndex, boardSize); 
+    _effectColor = Colors.orangeAccent;
+    // Example: Find a piece at that boardIndex to get its screen position for effect
+    // This needs LudoGame's method to find piece by global board index.
+    // Or, GameProvider could expose the screen position directly.
+    // For now, let's assume gameProvider.captureEffectScreenPosition is set.
+    // This logic will be moved to build method.
+    if (gameProvider.captureEffectBoardIndex != null) {
+        // TODO: Calculate _captureEffectScreenPosition based on gameProvider.captureEffectBoardIndex
+        // This requires mapping global board index to screen coordinates.
+        // For now, this will be triggered by build() method.
+    }
   }
 
+<<<<<<< HEAD
   void _startReachedHomeAnimation(GameProvider gameProvider, String playerId, int tokenIndex) {
     final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
     final double boardSize = renderBox?.hasSize == true
@@ -217,8 +253,36 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     
     setState(() {
       _isReachedHomeAnimating = true;
+=======
+  void _startReachedHomeAnimation(GameProvider gameProvider, PlayerColor playerColor, int pieceId, double boardSize) {
+    // TODO: Calculate _reachedHomeEffectScreenPosition
+    // This logic will be moved to build method.
+    _reachedHomeEffectColor = _getDisplayColorForPlayer(playerColor);
+    // final finishedPieceForEffect = Piece(playerColor, pieceId, isFinished: true); 
+    // _reachedHomeEffectScreenPosition = _getOffsetForLogicalPosition(finishedPieceForEffect, boardSize, gameProvider);
+    
+    setState(() {
+      _isReachedHomeAnimating = true;
+      _reachedHomeAnimatingPlayerColor = playerColor;
+      _reachedHomeAnimatingPieceId = pieceId;
+>>>>>>> archive-ludo-logic-update
     });
     _reachedHomeAnimationController.forward(from: 0.0);
+  }
+  
+  Color _getDisplayColorForPlayer(PlayerColor playerColor) {
+    switch (playerColor) {
+      case PlayerColor.red:
+        return Colors.red.shade700; // Using a darker shade for better visibility
+      case PlayerColor.green:
+        return Colors.green.shade700;
+      case PlayerColor.yellow:
+        return Colors.yellow.shade600; // Darker yellow
+      case PlayerColor.blue:
+        return Colors.blue.shade700;
+      default:
+        return Colors.grey.shade700; // Fallback
+    }
   }
 
   @override
@@ -226,16 +290,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Ludo Club'),
-        backgroundColor: Colors.blue.shade700,
+        backgroundColor: Colors.blue.shade700, 
         elevation: 0,
         actions: [
-          // Sound-Einstellungen-Button
           IconButton(
             icon: const Icon(Icons.volume_up),
             tooltip: 'Sound-Einstellungen',
             onPressed: _showSoundSettingsDialog,
           ),
-          // Speichern-Button
           IconButton(
             icon: const Icon(Icons.save),
             tooltip: 'Spiel speichern',
@@ -245,17 +307,22 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
       body: Consumer<GameProvider>(
         builder: (context, gameProvider, child) {
-          final gameState = gameProvider.gameState;
-          final possibleMoves = gameProvider.getPossibleMoves();
-          
-          // Prüfe, ob das Spiel vorbei ist und zeige den Gewinnbildschirm
-          if (gameState.isGameOver && !_winnerDialogShown) {
-            // Verzögerung für eine bessere Benutzererfahrung
+          final currentPlayerMeta = gameProvider.getPlayerMeta(gameProvider.currentPlayerColor);
+          final bool isGameOver = gameProvider.gameState.isGameOver; 
+          final PlayerColor? winnerColor = gameProvider.gameState.winnerId;
+
+          if (isGameOver && winnerColor != null && !_winnerDialogShown) {
             Future.delayed(const Duration(milliseconds: 500), () {
+<<<<<<< HEAD
               if (!mounted) return;
               _showWinnerDialog(gameState.winner!);
+=======
+              if(mounted) {
+                 _showWinnerDialog(gameProvider, winnerColor);
+                 _winnerDialogShown = true; 
+              }
+>>>>>>> archive-ludo-logic-update
             });
-            _winnerDialogShown = true;
           }
           
           return Container(
@@ -292,32 +359,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                                 ),
                               ),
                               Text(
-                                gameState.currentPlayer.name,
+                                currentPlayerMeta.name,
                                 style: const TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              if (gameState.currentPlayer.isAI)
-                                Row(
-                                  children: [
-                                    const Text(
-                                      '(KI-Spieler)',
-                                      style: TextStyle(
-                                        fontStyle: FontStyle.italic,
-                                        color: Colors.blue,
-                                      ),
-                                    ),
-                                    if (gameProvider.isAiThinking)
-                                      const Padding(
-                                        padding: EdgeInsets.only(left: 8.0),
-                                        child: SizedBox(
-                                          width: 12, 
-                                          height: 12,
-                                          child: CircularProgressIndicator(strokeWidth: 2.0),
-                                        ),
-                                      ),
-                                  ],
+                              if (currentPlayerMeta.isAI)
+                                const Text(
+                                  '(KI-Spieler)',
+                                  style: TextStyle(
+                                    fontStyle: FontStyle.italic,
+                                    color: Colors.blue,
+                                  ),
                                 ),
                             ],
                           ),
@@ -331,7 +385,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                                 ),
                               ),
                               Text(
-                                gameState.lastDiceValue?.toString() ?? '-',
+                                gameProvider.currentDiceValue == 0 ? '-' : gameProvider.currentDiceValue.toString(),
                                 style: const TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.bold,
@@ -339,24 +393,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                               ),
                             ],
                           ),
-                          Column(
-                            children: [
-                              Text(
-                                'Würfe:',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                              Text(
-                                '${gameState.currentRollCount}/3',
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
+                          // Removed currentRollCount display
                         ],
                       ),
                     ),
@@ -376,7 +413,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                         ),
                         child: Padding(
                           padding: const EdgeInsets.all(8.0),
-                          child: _buildGameBoard(gameState, possibleMoves, gameProvider),
+                          child: _buildGameBoard(gameProvider), 
                         ),
                       ),
                     ),
@@ -391,7 +428,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     children: [
                       // Würfel
                       GestureDetector(
-                        onTap: () => _rollDice(gameProvider),
+                        onTap: gameProvider.isAnimating || gameProvider.getPlayerMeta(gameProvider.currentPlayerColor).isAI ? null : () => _rollDice(gameProvider),
                         child: AnimatedBuilder(
                           animation: _diceAnimation,
                           builder: (context, child) {
@@ -413,7 +450,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                                 ),
                                 child: Center(
                                   child: Text(
-                                    gameState.lastDiceValue?.toString() ?? _displayDiceValue.toString(),
+                                    _diceAnimationController.isAnimating 
+                                        ? _displayDiceValue.toString() 
+                                        : (gameProvider.currentDiceValue == 0 ? "-" : gameProvider.currentDiceValue.toString()),
                                     style: const TextStyle(
                                       fontSize: 40,
                                       fontWeight: FontWeight.bold,
@@ -428,7 +467,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       const SizedBox(width: 24),
                       // Würfeln-Button
                       ElevatedButton(
-                        onPressed: gameProvider.isAnimating || gameState.currentPlayer.isAI
+                        onPressed: gameProvider.isAnimating || gameProvider.getPlayerMeta(gameProvider.currentPlayerColor).isAI
                             ? null
                             : () => _rollDice(gameProvider),
                         style: ElevatedButton.styleFrom(
@@ -460,79 +499,107 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildGameBoard(GameState gameState, List<int> possibleMoves, GameProvider gameProvider) {
-    // Einfaches Spielbrett mit 40 Feldern im Kreis + Heimatfelder + Zielfelder
+  Widget _buildGameBoard(GameProvider gameProvider) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final boardSize = constraints.maxWidth;
-        final fieldSize = boardSize / 15;
+        final fieldSize = boardSize / 15.0; // Ensure double for calculations
         
-        // Hole die detaillierten Zugmöglichkeiten (Token-Index + Zielposition)
-        final moveDetails = gameProvider.getPossibleMoveDetails();
+        final List<Piece> allPieces = gameProvider.allBoardPieces;
+        final List<Piece> movableGamePieces = gameProvider.getMovablePieces();
         
+        // Trigger effect animations post-frame
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return; // Ensure widget is still in the tree
+
+          if (gameProvider.showCaptureEffect && !_isCaptureAnimating && gameProvider.captureEffectBoardIndex != null) {
+            // Assuming captureEffectBoardIndex is a global main path index.
+            // We need a way to get the screen coordinates for this global index.
+            // This might involve creating a temporary dummy piece if _getOffsetForLogicalPosition can use it.
+            // Or, a new helper: _getOffsetForGlobalBoardIndex(index, boardSize).
+            // For now, let's assume _calculateMainBoardPosition can be used.
+            // The color of the piece causing the capture is gameProvider.currentPlayerColor (before turn changes)
+            // or more accurately, the color of the piece that just moved.
+            // Let's use a placeholder for the color for the effect if not readily available.
+             _captureEffectScreenPosition = _calculateMainBoardPosition(gameProvider.captureEffectBoardIndex!, boardSize, fieldSize, gameProvider.currentPlayerColor);
+            if (_captureEffectScreenPosition != null) {
+                 setState(() { _isCaptureAnimating = true; });
+                 _captureAnimationController.forward(from: 0.0);
+            }
+          }
+          if (gameProvider.showReachedHomeEffect && !_isReachedHomeAnimating && gameProvider.reachedHomePlayerId != null && gameProvider.reachedHomeTokenIndex != null) {
+            // Create a dummy piece that is in the finished state for position calculation.
+            Piece finishedPieceForEffect = Piece(
+                gameProvider.reachedHomePlayerId!, 
+                gameProvider.reachedHomeTokenIndex!, // This is piece.id
+                PiecePosition(0, isHome: false), // Position doesn't matter as isSafe = true
+                isSafe: true
+            );
+            _reachedHomeEffectScreenPosition = _getOffsetForLogicalPosition(finishedPieceForEffect, boardSize, gameProvider);
+            _reachedHomeEffectColor = _getDisplayColorForPlayer(gameProvider.reachedHomePlayerId!);
+            if(_reachedHomeEffectScreenPosition != null){
+                setState(() { 
+                    _isReachedHomeAnimating = true; 
+                    _reachedHomeAnimatingPlayerColor = gameProvider.reachedHomePlayerId; // Store for context if needed
+                    _reachedHomeAnimatingPieceId = gameProvider.reachedHomeTokenIndex;
+                });
+                _reachedHomeAnimationController.forward(from: 0.0);
+            }
+          }
+        });
+
         return Stack(
           children: [
-            // Spielbrett-Hintergrund
             CustomPaint(
               size: Size(boardSize, boardSize),
-              painter: GameBoardPainter(),
+              painter: GameBoardPainter(), 
             ),
             
-            // Spielfelder und Zielpositionen hervorheben
-            ...moveDetails.map((move) {
-              final targetPos = move['targetPosition']!;
-              final tokenIdxToAnimate = move['tokenIndex']!; // This is the token index for the current player
-              final currentPlayerId = gameState.currentTurnPlayerId;
-
-              if (targetPos == GameState.finishedPosition) {
-                return Container(); 
-              }
-              
-              // Calculate screen position for the highlighted target field
-              // This highlighting itself doesn't need animation, it's just a target indicator.
-              final position = _getOffsetForLogicalPosition(currentPlayerId, tokenIdxToAnimate, targetPos, boardSize, gameState);
-              
+            // Highlight movable pieces
+            ...movableGamePieces.map((movablePiece) {
+              final Offset pieceScreenPos = _getOffsetForLogicalPosition(movablePiece, boardSize, gameProvider);
               return Positioned(
-                left: position.dx - fieldSize / 2,
-                top: position.dy - fieldSize / 2,
+                left: pieceScreenPos.dx - fieldSize / 2,
+                top: pieceScreenPos.dy - fieldSize / 2,
                 child: GestureDetector(
-                  onTap: () => _initiatePawnAnimation(
-                    gameProvider,
-                    currentPlayerId,
-                    tokenIdxToAnimate,
-                    targetPos,
-                    boardSize // Pass boardSize
-                  ),
+                  onTap: () => _initiatePawnAnimation(gameProvider, movablePiece, boardSize),
                   child: Container(
                     width: fieldSize,
                     height: fieldSize,
                     decoration: BoxDecoration(
+<<<<<<< HEAD
                       color: Colors.yellow.withAlpha((255 * 0.5).round()),
                       border: Border.all(
                         color: Colors.orange,
                         width: 2,
                       ),
+=======
+                      color: Colors.yellow.withOpacity(0.7),
+                      border: Border.all(color: Colors.orangeAccent, width: 2.5),
+>>>>>>> archive-ludo-logic-update
                       shape: BoxShape.circle,
+                       boxShadow: [
+                        BoxShadow(
+                          color: Colors.yellow.withOpacity(0.5),
+                          blurRadius: 8.0,
+                          spreadRadius: 2.0,
+                        )
+                      ],
                     ),
                   ),
                 ),
               );
             }).toList(),
             
-            // Spielfiguren
-            ...gameState.players.expand((player) {
-              return player.tokenPositions.asMap().entries.map((entry) {
-                final tokenIndex = entry.key;
-                final logicalPosition = entry.value;
-                Offset displayPosition;
-
-                if (player.id == _animatingPlayerId && tokenIndex == _animatingTokenIndex && _animationCurrentOffset != null) {
-                  displayPosition = _animationCurrentOffset!;
-                } else {
-                  displayPosition = _getOffsetForLogicalPosition(player.id, tokenIndex, logicalPosition, boardSize, gameState);
-                }
-                return _buildToken(player, tokenIndex, displayPosition, fieldSize, gameProvider, gameState, boardSize);
-              });
+            // Draw all pieces
+            ...allPieces.map((piece) {
+              Offset displayPosition;
+              if (_animatingPiece != null && _animatingPiece!.color == piece.color && _animatingPiece!.id == piece.id && _animationCurrentOffset != null) {
+                displayPosition = _animationCurrentOffset!;
+              } else {
+                displayPosition = _getOffsetForLogicalPosition(piece, boardSize, gameProvider);
+              }
+              return _buildToken(piece, displayPosition, fieldSize, gameProvider, boardSize);
             }).toList(),
 
             // Capture Effect Animation
@@ -553,7 +620,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 ),
               ),
 
-            // Reached Home Effect Animation
+            // Reached Home Effect Animation (triggering logic will be refined)
             if (_isReachedHomeAnimating && _reachedHomeEffectScreenPosition != null)
               Positioned(
                 left: _reachedHomeEffectScreenPosition!.dx - fieldSize, // Center effect area on token
@@ -564,19 +631,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   child: CustomPaint(
                     painter: ReachedHomeEffectPainter(
                       animationValue: _reachedHomeShineAnimation.value,
-                      color: _reachedHomeEffectColor,
+                      color: _reachedHomeEffectColor, // This should be set to the player's color
                     ),
                     size: Size(fieldSize * 2, fieldSize * 2),
                   ),
                 ),
               ),
             
-            // Safe Zones markieren
-            ...gameState.players.map((player) {
-              final safeIndex = gameState.startIndex[player.id]!;
-              final position = _calculateFieldPosition(safeIndex, boardSize);
-              final playerColor = _getPlayerColor(player.id);
-              
+            // Safe Zones markieren - This was based on old GameState.startIndex and _getPlayerColor(String)
+            // This needs to be re-evaluated if safe zones are to be visually marked based on LudoGame logic.
+            // For now, removing the old implementation.
+            /*
+            ...gameProvider.allBoardPieces.where((p) => LudoGame.isSafeZone(p.position, p.color)).map((piece) {
+              final position = _getOffsetForLogicalPosition(piece, boardSize, gameProvider);
+              final playerColor = _getDisplayColorForPlayer(piece.color);
               return Positioned(
                 left: position.dx - fieldSize / 2,
                 top: position.dy - fieldSize / 2,
@@ -586,21 +654,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   decoration: BoxDecoration(
                     color: Colors.transparent,
                     shape: BoxShape.circle,
-                    border: Border.all(
-                      color: playerColor,
-                      width: 3,
-                      style: BorderStyle.solid,
-                    ),
+                    border: Border.all(color: playerColor.withOpacity(0.5), width: 2, style: BorderStyle.solid),
                   ),
                 ),
               );
             }).toList(),
+            */
           ],
         );
       },
     );
   }
   
+<<<<<<< HEAD
   // Berechnet die Positionen für die 4 Figuren im Heimatfeld eines Spielers
   // Removed unused method _getHomeFieldPositions
   // List<Offset> _getHomeFieldPositions(String playerId, double boardSize, double fieldSize) {
@@ -636,30 +702,37 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     
   //   return positions;
   // }
+=======
+  // _buildHomePiece removed as pieces are now handled uniformly by _buildToken and _getOffsetForLogicalPosition
+  // _getHomeFieldPositions removed for the same reason.
+>>>>>>> archive-ludo-logic-update
 
   // Baut eine einzelne Spielfigur
-  Widget _buildToken(Player player, int tokenIndex, Offset position, double fieldSize, GameProvider gameProvider, GameState gameState, double boardSize) {
-    final playerColor = _getPlayerColor(player.id);
-    // Check if this specific token can be moved by the current player
-    final bool isCurrentPlayerToken = player.id == gameState.currentTurnPlayerId;
-    final canBeMoved = isCurrentPlayerToken && gameProvider
-        .getPossibleMoveDetails()
-        .any((move) => move['tokenIndex'] == tokenIndex);
+  Widget _buildToken(Piece piece, Offset screenPosition, double fieldSize, GameProvider gameProvider, double boardSize) {
+    final displayPlayerColor = _getDisplayColorForPlayer(piece.color);
+    final bool isCurrentPlayerPiece = piece.color == gameProvider.currentPlayerColor;
+    // Check if this piece is in the list of movable pieces from GameProvider
+    final bool canBeMoved = isCurrentPlayerPiece && gameProvider.getMovablePieces().any((p) => p.id == piece.id && p.color == piece.color);
     
     return Positioned(
-      left: position.dx - fieldSize / 2,
-      top: position.dy - fieldSize / 2,
+      left: screenPosition.dx - fieldSize / 2, // Use screenPosition passed as argument
+      top: screenPosition.dy - fieldSize / 2,  // Use screenPosition passed as argument
       child: GestureDetector(
+<<<<<<< HEAD
         onTap: canBeMoved && !gameProvider.isAnimating
           ? () {
               _showMoveOptions(gameProvider, player.id, tokenIndex, gameState, boardSize); 
             }
+=======
+        onTap: canBeMoved && !gameProvider.isAnimating && gameProvider.currentDiceValue > 0
+          ? () => _initiatePawnAnimation(gameProvider, piece, boardSize)
+>>>>>>> archive-ludo-logic-update
           : null,
         child: Container(
           width: fieldSize,
           height: fieldSize,
           decoration: BoxDecoration(
-            color: playerColor,
+            color: displayPlayerColor, // Use display color
             shape: BoxShape.circle,
             border: Border.all(
               color: Colors.white,
@@ -675,7 +748,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           ),
           child: Center(
             child: Text(
-              (tokenIndex + 1).toString(),
+              (piece.id + 1).toString(), // Use piece.id
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
@@ -687,6 +760,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
+<<<<<<< HEAD
   // Zeigt Popup mit möglichen Zügen für diese Figur
   void _showMoveOptions(GameProvider gameProvider, String playerId, int tokenIndex, GameState gameState, double boardSize) {
     if (playerId != gameState.currentTurnPlayerId || gameProvider.isAnimating) {
@@ -707,6 +781,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     // Pass boardSize to _initiatePawnAnimation
     _initiatePawnAnimation(gameProvider, playerId, tokenIndex, targetLogicalPosition, boardSize);
   }
+=======
+  // _showMoveOptions method removed as per instruction.
+>>>>>>> archive-ludo-logic-update
 
   // ADDED METHOD
   void _initiatePawnAnimation(GameProvider gameProvider, String playerId, int tokenIndex, int targetLogicalPosition, double boardSize) {
@@ -751,107 +828,129 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   // Helper to get screen offset for any logical game position
-  Offset _getOffsetForLogicalPosition(String playerId, int tokenIndex, int logicalPosition, double boardSize, GameState gameState) {
-    if (logicalPosition == GameState.basePosition) {
-      return _calculateBasePosition(playerId, tokenIndex, boardSize);
-    } else if (logicalPosition == GameState.finishedPosition) {
-      return _calculateFinishPosition(playerId, tokenIndex, boardSize);
-    } else if (logicalPosition >= GameState.totalFields) {
-      return _calculateHomePathPosition(playerId, logicalPosition - GameState.totalFields, boardSize);
-    } else {
-      return _calculateFieldPosition(logicalPosition, boardSize);
+  Offset _getOffsetForLogicalPosition(Piece piece, double boardSize, GameProvider gameProvider) {
+    final double fieldSize = boardSize / 15.0; // Consistent with GameBoardPainter
+    
+    // Use piece.position.isHome for yard, piece.isSafe for finished.
+    // piece.position.fieldId is the relevant ID.
+    if (piece.position.isHome) { // Piece is in the yard
+      return _calculateBasePosition(piece.color, piece.id, boardSize, fieldSize);
+    } else if (piece.isSafe) { // Piece is finished
+      return _calculateFinishPosition(piece.color, piece.id, boardSize, fieldSize);
+    } else { 
+      // Piece is on the main path or a player's home path (but not finished yet)
+      // LudoGameLogic uses fieldId 0-39 for main path, and 0-3 for home path (player specific)
+      // This needs a robust way to map these to global screen coordinates.
+      // The existing _calculateMainBoardPosition uses a pathMapping that might be compatible if 
+      // LudoGame can provide a "global display index" or if we adapt it.
+      // For now, we assume piece.position.fieldId is a global-like index if not isHome/isSafe.
+      // This part is the most complex and error-prone without exact LudoGame details.
+      
+      // TODO: Refine this logic based on LudoGame's exact coordinate system.
+      // For now, let's assume piece.position.fieldId can be used with _calculateMainBoardPosition
+      // if we have a way to know if it's a main path or home path index.
+      // The LudoGameLogic PiecePosition has fieldId and isHome. isSafe is on Piece.
+      // If !piece.position.isHome and !piece.isSafe, it's on the board or home path (not finished).
+      // The current _calculateMainBoardPosition is for the 0-51 main track.
+      // Home path positions (0-3 for each player) need separate calculation.
+      // LudoGameLogic doesn't have a clear "home path index" separate from "main path index".
+      // Let's assume for now: if not isHome and not isSafe, it's on the main path.
+      // This is a simplification.
+      return _calculateMainBoardPosition(piece.position.fieldId, boardSize, fieldSize, piece.color);
     }
   }
 
-  // Berechnet die Position in der Basis eines Spielers
-  Offset _calculateBasePosition(String playerId, int tokenIndex, double boardSize) {
-    final fieldSize = boardSize / 13;
-    final basePositions = {
-      'player1': [
-        Offset(2 * fieldSize, 2 * fieldSize),
-        Offset(4 * fieldSize, 2 * fieldSize),
-        Offset(2 * fieldSize, 4 * fieldSize),
-        Offset(4 * fieldSize, 4 * fieldSize),
-      ],
-      'player2': [
-        Offset(9 * fieldSize, 2 * fieldSize),
-        Offset(11 * fieldSize, 2 * fieldSize),
-        Offset(9 * fieldSize, 4 * fieldSize),
-        Offset(11 * fieldSize, 4 * fieldSize),
-      ],
-      'player3': [
-        Offset(9 * fieldSize, 9 * fieldSize),
-        Offset(11 * fieldSize, 9 * fieldSize),
-        Offset(9 * fieldSize, 11 * fieldSize),
-        Offset(11 * fieldSize, 11 * fieldSize),
-      ],
-      'player4': [
-        Offset(2 * fieldSize, 9 * fieldSize),
-        Offset(4 * fieldSize, 9 * fieldSize),
-        Offset(2 * fieldSize, 11 * fieldSize),
-        Offset(4 * fieldSize, 11 * fieldSize),
-      ],
+  Offset _calculateBasePosition(PlayerColor playerColor, int pieceId, double boardSize, double fieldSize) {
+    // Using a simplified layout for base positions, assuming 4 pieces per player.
+    // These coordinates are relative to the top-left of the board.
+    // Each player's base is a 2x2 grid of piece positions.
+    // Example: Red player (top-left corner of the game board drawing)
+    //  (1,1) (2,1)
+    //  (1,2) (2,2)  -- in terms of fieldSize units for center of piece.
+    
+    double  baseX = 0, baseY = 0;
+    // These multipliers are for the larger 6x6 player corner area.
+    // Inside that, the 4x4 white area, then 2x2 circles for pieces.
+    // Let's use the GameBoardPainter's logic for corner positions.
+    // Green: top-left, Yellow: top-right, Red: bottom-left, Blue: bottom-right (as per GameBoardPainter)
+    // This mapping might differ from PlayerColor enum values.
+    // For now, map PlayerColor to GameBoardPainter's color order.
+    // Green (0) -> PlayerColor.green, Yellow (1) -> PlayerColor.yellow, Red (2) -> PlayerColor.red, Blue (3) -> PlayerColor.blue
+
+    Map<PlayerColor, Offset> playerCornerOffsets = {
+        PlayerColor.green: Offset(0 * fieldSize, 0 * fieldSize), // Top-left
+        PlayerColor.yellow: Offset(9 * fieldSize, 0 * fieldSize), // Top-right
+        PlayerColor.red: Offset(0 * fieldSize, 9 * fieldSize),   // Bottom-left
+        PlayerColor.blue: Offset(9 * fieldSize, 9 * fieldSize),  // Bottom-right
     };
     
-    return basePositions[playerId]![tokenIndex];
-  }
-  
-  // Berechnet die Position im Zielbereich
-  Offset _calculateFinishPosition(String playerId, int tokenIndex, double boardSize) {
-    final fieldSize = boardSize / 13;
-    final finishPositions = {
-      'player1': Offset(6 * fieldSize, 6 * fieldSize),
-      'player2': Offset(7 * fieldSize, 6 * fieldSize),
-      'player3': Offset(7 * fieldSize, 7 * fieldSize),
-      'player4': Offset(6 * fieldSize, 7 * fieldSize),
-    };
-    
-    // Im Zielfeld werden die Tokens gestapelt
-    return finishPositions[playerId]!;
-  }
-  
-  // Berechnet die Position auf dem Heimweg (Zielgerade)
-  Offset _calculateHomePathPosition(String playerId, int homePathIndex, double boardSize) {
-    final fieldSize = boardSize / 13;
-    
-    // Pfadkoordinaten für jeden Spieler
-    final homePaths = {
-      'player1': [
-        Offset(6 * fieldSize, 5 * fieldSize),
-        Offset(6 * fieldSize, 4 * fieldSize),
-        Offset(6 * fieldSize, 3 * fieldSize),
-        Offset(6 * fieldSize, 2 * fieldSize),
-      ],
-      'player2': [
-        Offset(7 * fieldSize, 6 * fieldSize),
-        Offset(8 * fieldSize, 6 * fieldSize),
-        Offset(9 * fieldSize, 6 * fieldSize),
-        Offset(10 * fieldSize, 6 * fieldSize),
-      ],
-      'player3': [
-        Offset(6 * fieldSize, 7 * fieldSize),
-        Offset(6 * fieldSize, 8 * fieldSize),
-        Offset(6 * fieldSize, 9 * fieldSize),
-        Offset(6 * fieldSize, 10 * fieldSize),
-      ],
-      'player4': [
-        Offset(5 * fieldSize, 6 * fieldSize),
-        Offset(4 * fieldSize, 6 * fieldSize),
-        Offset(3 * fieldSize, 6 * fieldSize),
-        Offset(2 * fieldSize, 6 * fieldSize),
-      ],
-    };
-    
-    if (homePathIndex >= 0 && homePathIndex < homePaths[playerId]!.length) {
-      return homePaths[playerId]![homePathIndex];
+    Offset cornerOffset = playerCornerOffsets[playerColor] ?? Offset(0,0);
+
+    // Positions within the 4x4 inner white square of the 6x6 player corner
+    List<Offset> pieceRelativeOffsets = [
+        Offset(cornerOffset.dx + 2.0 * fieldSize, cornerOffset.dy + 2.0 * fieldSize), // Top-left piece in base
+        Offset(cornerOffset.dx + 4.0 * fieldSize, cornerOffset.dy + 2.0 * fieldSize), // Top-right
+        Offset(cornerOffset.dx + 2.0 * fieldSize, cornerOffset.dy + 4.0 * fieldSize), // Bottom-left
+        Offset(cornerOffset.dx + 4.0 * fieldSize, cornerOffset.dy + 4.0 * fieldSize), // Bottom-right
+    ];
+
+    if (pieceId < pieceRelativeOffsets.length) {
+        return pieceRelativeOffsets[pieceId];
     }
+    return Offset(fieldSize, fieldSize); // Fallback
+  }
+  
+  Offset _calculateFinishPosition(PlayerColor playerColor, int pieceId, double boardSize, double fieldSize) {
+    // Center of the board (3x3 area in GameBoardPainter)
+    // Each player has a triangular segment pointing inwards.
+    // Let's place finished pieces near their triangle tip.
+    Map<PlayerColor, Offset> finishAreaCenters = {
+      PlayerColor.green: Offset(7.5 * fieldSize, 6.5 * fieldSize), // Tip of green triangle
+      PlayerColor.yellow: Offset(8.5 * fieldSize, 7.5 * fieldSize), // Tip of yellow triangle
+      PlayerColor.red: Offset(7.5 * fieldSize, 8.5 * fieldSize),   // Tip of red triangle
+      PlayerColor.blue: Offset(6.5 * fieldSize, 7.5 * fieldSize),  // Tip of blue triangle
+    };
+    // Simple stacking for multiple finished pieces of the same color
+    double stackOffset = pieceId * (fieldSize * 0.2); // Small offset for stacking
+    Offset basePos = finishAreaCenters[playerColor] ?? Offset(boardSize/2, boardSize/2);
+
+    // Adjust offset based on player color to stack inwards or along a line
+    switch (playerColor) {
+        case PlayerColor.green: return Offset(basePos.dx, basePos.dy + stackOffset);
+        case PlayerColor.yellow: return Offset(basePos.dx - stackOffset, basePos.dy);
+        case PlayerColor.red: return Offset(basePos.dx, basePos.dy - stackOffset);
+        case PlayerColor.blue: return Offset(basePos.dx + stackOffset, basePos.dy);
+        default: return basePos;
+    }
+  }
+  
+  Offset _calculateHomePathPosition(PlayerColor playerColor, int homePathIndex, double boardSize, double fieldSize) {
+    // Based on GameBoardPainter's _drawHomeColumn
+    // Green (top-down): col 7, rows 1-5
+    // Yellow (left-right): row 7, cols 9-13
+    // Red (bottom-up): col 7, rows 9-13 (reversed)
+    // Blue (right-left): row 7, cols 1-5 (reversed)
+
+    Map<PlayerColor, List<Offset>> homePathCoords = {
+      PlayerColor.green: List.generate(5, (i) => Offset(7.5 * fieldSize, (1.5 + i) * fieldSize)),
+      PlayerColor.yellow: List.generate(5, (i) => Offset((9.5 + i) * fieldSize, 7.5 * fieldSize)),
+      PlayerColor.red: List.generate(5, (i) => Offset(7.5 * fieldSize, (13.5 - i) * fieldSize)),
+      PlayerColor.blue: List.generate(5, (i) => Offset((5.5 - i) * fieldSize, 7.5 * fieldSize)),
+    };
     
-    // Fallback
-    return Offset(6 * fieldSize, 6 * fieldSize);
+    if (homePathCoords.containsKey(playerColor) && homePathIndex >= 0 && homePathIndex < homePathCoords[playerColor]!.length) {
+      return homePathCoords[playerColor]![homePathIndex];
+    }
+    return Offset(boardSize/2, boardSize/2); // Fallback
   }
 
-  // Berechnet die Position eines Feldes auf dem Spielbrett
-  Offset _calculateFieldPosition(int index, double boardSize) {
+  Offset _calculateMainBoardPosition(int boardIndex, double boardSize, double fieldSize, PlayerColor forPlayerColorIfAmbiguous) {
+    // This is a simplified mapping for the main path (0-39 for LudoGameLogic)
+    // This needs to align with GameBoardPainter if visual accuracy is paramount.
+    // The existing pathMapping in the original _calculateFieldPosition was complex.
+    // For now, a very basic circular path.
+    // LudoGameLogic uses 40 fields for main path.
+    // Let's divide boardSize by ~13 cells for outer track approx.
     final cellSize = boardSize / 15;
     
     // Definiere die Pfade für jede Seite des Bretts - 13 Felder pro Seite, insgesamt 52 Felder
@@ -918,8 +1017,30 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     pathMapping[203] = [7, 13]; // Blau (untere Seite)
     
     // Ermittle die Koordinaten für den angegebenen Index
-    if (pathMapping.containsKey(index)) {
-      final pos = pathMapping[index]!;
+    // The boardIndex from LudoGameLogic is 0-39.
+    // The GameBoardPainter has a 15x15 grid.
+    // The main path is 3 cells wide. Outer cells are for travel.
+    // Example mapping for a 40-step path on a 15x15 grid:
+    // Let's map to the middle of the 3-cell wide tracks.
+    // Top track (cols 1-13, row 7.5)
+    // Right track (col 7.5, rows 1-13)
+    // Bottom track (cols 1-13 reversed, row 7.5)
+    // Left track (col 7.5, rows 1-13 reversed)
+    // This is a gross oversimplification and won't match GameBoardPainter perfectly.
+    // A proper solution would require a detailed path definition from LudoGame or GameBoardPainter.
+
+    // Using the GameBoardPainter's outer track for simplicity:
+    // Green start: (1,7) -> pathMapping[200]
+    // Yellow start: (8,1) -> pathMapping[201]
+    // Red start: (13,7) -> pathMapping[202]
+    // Blue start: (7,13) -> pathMapping[203]
+    
+    // A very simplified circular path for now.
+    double angle = (boardIndex / 40.0) * 2 * pi; // 40 steps in a circle
+    double radius = boardSize * 0.4; // Adjust radius as needed
+    Offset center = Offset(boardSize / 2, boardSize / 2);
+    if (pathMapping.containsKey(boardIndex)) { // Use old mapping if index matches.
+      final pos = pathMapping[boardIndex]!;
       return Offset(
         pos[0] * cellSize + cellSize/2,
         pos[1] * cellSize + cellSize/2
@@ -930,38 +1051,127 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     return Offset(boardSize / 2, boardSize / 2);
   }
 
-  // Gibt die Farbe für einen Spieler zurück
-  Color _getPlayerColor(String playerId) {
-    switch (playerId) {
-      case 'player1':
-        return Colors.green;
-      case 'player2':
-        return Colors.yellow;
-      case 'player3':
-        return Colors.red;
-      case 'player4':
-        return Colors.blue;
-      default:
-        return Colors.grey;
-    }
-  }
+  // _getPlayerColor is renamed to _getDisplayColorForPlayer and takes PlayerColor
 
-  // Würfeln
   Future<void> _rollDice(GameProvider gameProvider) async {
     if (gameProvider.isAnimating) return;
     
     _diceAnimationController.reset();
     _diceAnimationController.forward();
     
-    final result = await gameProvider.rollDice();
-    setState(() {
-      _displayDiceValue = result;
-    });
+    // rollDice in GameProvider now returns the dice value.
+    final result = await gameProvider.rollDice(); 
+    // No need to call setState here to update _displayDiceValue if
+    // the Text widget for dice directly uses gameProvider.currentDiceValue
+    // and the animation part (_displayDiceValue) is handled by _diceAnimationController listener.
+    // However, if you want _displayDiceValue to show the final result after animation, then:
+    // _diceAnimationController.addStatusListener once here for the final value if needed.
+    // For now, the Text widget will update via Consumer once gameProvider notifies.
   }
 
+<<<<<<< HEAD
   // Zeigt den Gewinnbildschirm als Dialog an
   void _showWinnerDialog(Player winner) {
     final playerColor = _getPlayerColor(winner.id);
+=======
+  Future<void> _initiatePawnAnimation(GameProvider gameProvider, Piece pieceToMove, double boardSize) async {
+    if (gameProvider.isAnimating) return;
+
+    _actualPlayerColorForMove = pieceToMove.color; 
+    
+    // Create a conceptual target piece for animation end offset.
+    // The actual game logic is handled by LudoGame.movePiece.
+    // This is a simplified calculation for animation purposes only.
+    int targetFieldIdDisplay = pieceToMove.position.fieldId;
+    bool targetIsSafeDisplay = pieceToMove.isSafe;
+    bool targetIsHomeDisplay = pieceToMove.position.isHome;
+    int dice = gameProvider.currentDiceValue;
+
+    if (!pieceToMove.position.isHome) { // If not in yard
+        targetFieldIdDisplay = pieceToMove.position.fieldId + dice;
+        
+        const int displayMainPathLength = 40; 
+        const int displayHomeLength = 4;    
+        
+        if (pieceToMove.position.fieldId < displayMainPathLength && 
+            targetFieldIdDisplay >= displayMainPathLength) {
+            int stepsIntoHome = targetFieldIdDisplay - displayMainPathLength;
+            if (stepsIntoHome >= displayHomeLength) {
+                targetFieldIdDisplay = displayHomeLength -1; 
+                targetIsSafeDisplay = true; 
+            } else {
+                targetFieldIdDisplay = stepsIntoHome; 
+            }
+             // When moving to home path, targetIsHomeDisplay should conceptually be false for PiecePosition
+             // if PiecePosition's isHome is strictly for the initial yard.
+             // LudoGameLogic's PiecePosition.isHome is for the yard.
+            targetIsHomeDisplay = false; 
+        } else if (pieceToMove.position.fieldId >= displayMainPathLength && pieceToMove.position.fieldId < (displayMainPathLength + displayHomeLength)){
+            if (targetFieldIdDisplay >= displayMainPathLength + displayHomeLength) { 
+                 targetFieldIdDisplay = displayHomeLength -1; 
+                 targetIsSafeDisplay = true; 
+            } else {
+                targetFieldIdDisplay = targetFieldIdDisplay - displayMainPathLength; 
+            }
+            targetIsHomeDisplay = false; // On home path, not in yard
+        }
+         else { 
+            targetFieldIdDisplay = targetFieldIdDisplay % displayMainPathLength;
+            targetIsHomeDisplay = false;
+        }
+
+
+    } else { 
+        // Moving from Yard. Assume LudoGame.getStartFieldId(color) gives the main path index.
+        // For animation, we'll use a placeholder if that's not available.
+        // Let's assume LudoGameLogic places it on the correct start field via movePiece.
+        // For animation target, we need a fieldId on the main path.
+        // Placeholder: use 0 or a player-specific start index if known.
+        // This part of animation target calculation needs to be robust.
+        // For now, assume target is field 0 for simplicity of display logic.
+        targetFieldIdDisplay = 0; // Needs actual start field from LudoGame for accuracy
+        targetIsHomeDisplay = false; 
+    }
+    
+    PiecePosition targetAnimPosition = PiecePosition(targetFieldIdDisplay, isHome: targetIsHomeDisplay);
+    if (targetIsSafeDisplay) { // If finished, isHome for PiecePosition might be false.
+      targetAnimPosition = PiecePosition(targetFieldIdDisplay, isHome: false);
+    }
+
+
+    Piece targetPieceStateForAnimation = Piece(
+        pieceToMove.color, 
+        pieceToMove.id, 
+        targetAnimPosition, 
+        isSafe: targetIsSafeDisplay
+    );
+
+
+    setState(() {
+      gameProvider.isAnimating = true;
+      _animatingPiece = pieceToMove;
+      _animatingPlayerColor = pieceToMove.color;
+      
+      Offset startOffset = _getOffsetForLogicalPosition(pieceToMove, boardSize, gameProvider);
+      Offset endOffset = _getOffsetForLogicalPosition(targetPieceStateForAnimation, boardSize, gameProvider);
+
+      _pawnAnimation = Tween<Offset>(
+        begin: startOffset,
+        end: endOffset, 
+      ).animate(CurvedAnimation(
+        parent: _pawnAnimationController,
+        curve: Curves.easeInOut,
+      ));
+      _animationCurrentOffset = startOffset; 
+    });
+
+    _pawnAnimationController.forward(from: 0.0);
+  }
+
+  void _showWinnerDialog(GameProvider gameProvider, PlayerColor winnerColor) { 
+    final displayPlayerColor = _getDisplayColorForPlayer(winnerColor);
+    final winnerMeta = gameProvider.getPlayerMeta(winnerColor);
+>>>>>>> archive-ludo-logic-update
     
     showDialog(
       context: context,
@@ -980,7 +1190,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: playerColor,
+                  color: displayPlayerColor, // Use display color
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 3),
                   boxShadow: [
@@ -993,7 +1203,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 ),
                 child: Center(
                   child: Text(
-                    winner.name.substring(0, 1).toUpperCase(),
+                    winnerMeta.name.substring(0, 1).toUpperCase(), // Use metadata
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -1004,7 +1214,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               ),
               const SizedBox(height: 20),
               Text(
-                '${winner.name} hat gewonnen!',
+                '${winnerMeta.name} hat gewonnen!', // Use metadata
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 20,
@@ -1043,8 +1253,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 // Neues Spiel mit den gleichen Spielern starten
                 final gameProvider = Provider.of<GameProvider>(context, listen: false);
                 gameProvider.startNewGame(
-                  gameProvider.gameState.players.map((p) => 
-                    Player(p.id, p.name, isAI: p.isAI)).toList()
+                  // This needs to map Player (from models/game_state) to PlayerColor for LudoGame if needed,
+                  // or ensure GameProvider.startNewGame handles this.
+                  // For now, assume GameProvider.startNewGame takes List<Player> (from models/game_state.dart)
+                  gameProvider.gameState.players.map((p) =>
+                    Player(p.id, p.name, isAI: p.isAI) // Recreate to avoid issues with old state
+                  ).toList()
                 );
                 
                 // Dialog-Flag zurücksetzen
