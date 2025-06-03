@@ -1,3 +1,8 @@
+<<<<<<< Updated upstream
 2025/05/24-00:03:27.161 7ee0 Reusing MANIFEST C:\Users\lewe1\AppData\Local\Temp\flutter_tools.532d4c50\flutter_tools_chrome_device.4a87d706\Default\Extension State/MANIFEST-000001
 2025/05/24-00:03:27.162 7ee0 Recovering log #3
 2025/05/24-00:03:27.163 7ee0 Reusing old log C:\Users\lewe1\AppData\Local\Temp\flutter_tools.532d4c50\flutter_tools_chrome_device.4a87d706\Default\Extension State/000003.log 
+=======
+2025/05/22-21:31:07.577 5bd8 Creating DB C:\Users\itech\AppData\Local\Temp\flutter_tools.732f9f1a\flutter_tools_chrome_device.69f2e507\Default\Extension State since it was missing.
+2025/05/22-21:31:07.589 5bd8 Reusing MANIFEST C:\Users\itech\AppData\Local\Temp\flutter_tools.732f9f1a\flutter_tools_chrome_device.69f2e507\Default\Extension State/MANIFEST-000001
+>>>>>>> Stashed changes
