@@ -1,18 +1,14 @@
 import 'package:flutter/material.dart';
 import '../models/game_state.dart';
-import '../logic/ludo_game_logic.dart';
+import '../services/game_service.dart';
 import '../services/save_load_service.dart';
 import '../services/audio_service.dart';
-<<<<<<< HEAD
 import '../services/statistics_service.dart'; // Import StatisticsService
 import 'dart:math';
-=======
-import '../services/statistics_service.dart';
->>>>>>> archive-ludo-logic-update
 
 class GameProvider extends ChangeNotifier {
   GameState _gameState;
-  late LudoGame _ludoGame; // Added
+  GameService _gameService;
   final SaveLoadService _saveLoadService = SaveLoadService();
   final AudioService _audioService = AudioService();
   final StatisticsService _statisticsService = StatisticsService(); // Add StatisticsService instance
@@ -25,13 +21,13 @@ class GameProvider extends ChangeNotifier {
 
   // Reached Home effect state
   bool _showReachedHomeEffect = false;
-  PlayerColor? _reachedHomePlayerId; // Changed from String?
-  int? _reachedHomeTokenIndex; // This might need to be the piece's original index or some stable ID
+  String? _reachedHomePlayerId;
+  int? _reachedHomeTokenIndex;
 
-  GameProvider(GameState initialState) : _gameState = initialState { // Modified constructor
-    _ludoGame = LudoGame(); // Initialize _ludoGame
-    _gameState.players = initialState.players; // Store players
-    _gameState.currentTurnPlayerId = _ludoGame.currentPlayer; // Sync current player
+  // AI Thinking state
+  bool _isAiThinking = false;
+
+  GameProvider(this._gameState) : _gameService = GameService(_gameState) {
     _initAudio();
   }
   
@@ -40,20 +36,8 @@ class GameProvider extends ChangeNotifier {
     await _audioService.init();
   }
   
-<<<<<<< HEAD
   GameState get gameState => _gameState;
   // bool get isAnimating => _isAnimating; // Removed getter
-=======
-  // GameState get gameState => _gameState; // Keep for now, will update later
-  GameState get gameState {
-    // Update _gameState with the latest from _ludoGame before returning
-    _gameState.currentTurnPlayerId = _ludoGame.currentPlayer;
-    _gameState.lastDiceValue = _ludoGame.diceValue;
-    // Note: WinnerId is updated in movePiece
-    return _gameState;
-  }
-  bool get isAnimating => _isAnimating; // For pawn movement
->>>>>>> archive-ludo-logic-update
 
   // Getters for capture effect
   bool get showCaptureEffect => _showCaptureEffect;
@@ -62,8 +46,11 @@ class GameProvider extends ChangeNotifier {
 
   // Getters for Reached Home effect
   bool get showReachedHomeEffect => _showReachedHomeEffect;
-  PlayerColor? get reachedHomePlayerId => _reachedHomePlayerId; // Changed
+  String? get reachedHomePlayerId => _reachedHomePlayerId;
   int? get reachedHomeTokenIndex => _reachedHomeTokenIndex;
+
+  // Getter for AI Thinking state
+  bool get isAiThinking => _isAiThinking;
 
   /// Clears capture effect flags. Called by UI after animation.
   void clearCaptureEffect() {
@@ -92,24 +79,14 @@ class GameProvider extends ChangeNotifier {
     // Würfel-Sound abspielen
     await _audioService.playDiceSound();
     
-<<<<<<< HEAD
     final result = _gameService.rollDice();
     isAnimating = false; // Use public field
-=======
-    final result = _ludoGame.rollDice(); // Use _ludoGame
-    _gameState.lastDiceValue = _ludoGame.diceValue; // Update GameState
-    _gameState.currentTurnPlayerId = _ludoGame.currentPlayer; // Update GameState
-
-    _isAnimating = false;
->>>>>>> archive-ludo-logic-update
     
     if (result == 6) {
-      // Update statistics call
-      await _statisticsService.incrementSixesRolled(_gameState.players.firstWhere((p) => p.id == _ludoGame.currentPlayer).name);
+      await _statisticsService.incrementSixesRolled(_gameState.currentPlayer.name);
     }
     notifyListeners();
     
-<<<<<<< HEAD
     // Wenn der aktuelle Spieler eine KI ist, automatischen Zug ausführen
     if (_gameState.isCurrentPlayerAI) {
       _isAiThinking = true;
@@ -122,95 +99,47 @@ class GameProvider extends ChangeNotifier {
       notifyListeners();
     }
     _handlePotentialAIMove(); // Call AI move handler after dice roll & notify
-=======
-    // AI triggering logic removed for now
->>>>>>> archive-ludo-logic-update
     
     return result;
   }
   
   /// Bewegt eine Spielfigur und aktualisiert Statistiken
-<<<<<<< HEAD
   Future<void> moveToken(int tokenIndex, int targetPosition) async {
     if (isAnimating) return; // Use public field
     
     isAnimating = true; // Use public field
     // notifyListeners(); // Notifying immediately might be too early if isAnimating is used to block UI before animation setup.
                         // GameScreen sets isAnimating true again in _initiatePawnAnimation.
-=======
-  Future<void> movePiece(Piece pieceToMove) async { // Renamed and signature changed
-    if (_isAnimating) return;
+
+    final String currentPlayerId = _gameState.currentTurnPlayerId;
+    final String currentPlayerName = _gameState.currentPlayer.name;
+
+    // `capturedOpponentId` is the ID of the player whose pawn was captured, or null.
+    final String? capturedOpponentId = _gameService.moveToken(currentPlayerId, tokenIndex, targetPosition);
     
-    _isAnimating = true;
-    // notifyListeners(); // Notifying immediately might be too early
->>>>>>> archive-ludo-logic-update
-
-    final movingPlayerColor = _ludoGame.currentPlayer;
-    final movingPlayerMeta = getPlayerMeta(movingPlayerColor);
-
-    // Store opponent pieces' states before move for capture detection
-    final opponentPiecesBeforeMove = _ludoGame.pieces.values
-        .expand((list) => list)
-        .where((p) => p.color != movingPlayerColor)
-        .map((p) => Piece(p.color, p.id)..position = p.position) // Correctly copy integer position
-        .toList();
-
-    final bool moveSuccessful = _ludoGame.movePiece(pieceToMove);
-
-    if (!moveSuccessful) {
-      _isAnimating = false;
-      // notifyListeners(); // Maybe notify if a move attempt failed?
-      return;
-    }
-
-    _gameState.lastDiceValue = _ludoGame.diceValue; // Update GameState
-    _gameState.currentTurnPlayerId = _ludoGame.currentPlayer; // Update GameState
-
-    bool captureOccurred = false;
-    for (var oldOpponentPiece in opponentPiecesBeforeMove) {
-      final newOpponentPiece = _ludoGame.pieces[oldOpponentPiece.color]!
-          .firstWhere((p) => p.id == oldOpponentPiece.id);
-      
-      // Use isInYard getter for capture detection
-      if (newOpponentPiece.isInYard && !oldOpponentPiece.isInYard) {
-        captureOccurred = true;
-        _showCaptureEffect = true;
-        
-        // Use getVisualPieceInfo for capture effect index
-        final VisualPieceInfo movingPieceInfo = _ludoGame.getVisualPieceInfo(pieceToMove);
-        if (movingPieceInfo.pathType == PiecePathType.MAIN_PATH) {
-          _captureEffectBoardIndex = movingPieceInfo.displayIndex;
-        } else {
-          // Optional: Decide what to do if capture results in piece not being on main path.
-          // For now, null means effect might not be shown or shown globally.
-          _captureEffectBoardIndex = null; 
-        }
-
-        await _audioService.playCaptureSound();
-        final capturedPlayerMeta = getPlayerMeta(newOpponentPiece.color);
-        await _statisticsService.incrementPawnsCaptured(movingPlayerMeta.name);
-        await _statisticsService.incrementPawnsLost(capturedPlayerMeta.name);
-        break; 
-      }
-    }
-
-    if (pieceToMove.isFinished) { // Use new isFinished getter
-      _showReachedHomeEffect = true;
-      _reachedHomePlayerId = pieceToMove.color;
-      _reachedHomeTokenIndex = pieceToMove.id; 
-
+    // Sound logic & Effect Triggers & Statistics
+    if (targetPosition == GameState.finishedPosition) {
       await _audioService.playFinishSound();
+      _showReachedHomeEffect = true;
+      _reachedHomePlayerId = currentPlayerId;
+      _reachedHomeTokenIndex = tokenIndex;
 
-      // Check win condition using isFinished
-      final didWin = _ludoGame.pieces[movingPlayerColor]!
-          .every((p) => p.isFinished);
-
-      if (didWin) {
-        _gameState.winnerId = movingPlayerColor;
+      if (_gameState.winnerId != null && _gameState.winnerId == currentPlayerId) {
         await _audioService.playVictorySound();
-        await _statisticsService.incrementGamesWon(movingPlayerMeta.name);
+        await _statisticsService.incrementGamesWon(currentPlayerName);
       }
-    } else if (!captureOccurred) {
+    } else if (capturedOpponentId != null) {
+      await _audioService.playCaptureSound();
+      _showCaptureEffect = true;
+      _captureEffectBoardIndex = targetPosition;
+      
+      await _statisticsService.incrementPawnsCaptured(currentPlayerName);
+      // Need to find the name of the captured opponent.
+      final capturedPlayer = _gameState.players.firstWhere((p) => p.id == capturedOpponentId, orElse: () => Player("unknown","Unknown"));
+      if (capturedPlayer.id != "unknown") { // Ensure player was found
+           await _statisticsService.incrementPawnsLost(capturedPlayer.name);
+      }
+    } else {
       await _audioService.playMoveSound();
     }
     
@@ -218,14 +147,16 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
     _handlePotentialAIMove(); // Call AI move handler after token move & notify
   }
-
-  /// Gibt mögliche Züge für den aktuellen Spieler zurück (movable pieces)
-  List<Piece> getMovablePieces() {
-    if (_ludoGame.diceValue == 0) return []; 
-    return _ludoGame.getMovablePieces(); // Directly call LudoGame method
+  
+  /// Gibt mögliche Züge für den aktuellen Spieler zurück
+  List<int> getPossibleMoves() {
+    return _gameService.getPossibleMoves();
   }
   
-  // Removed getPossibleMoves and getPossibleMoveDetails
+  /// Gibt detaillierte Informationen zu möglichen Zügen zurück (tokenIndex und targetPosition)
+  List<Map<String, int>> getPossibleMoveDetails() {
+    return _gameService.getPossibleMoveDetails();
+  }
   
   /// Aktiviert oder deaktiviert alle Soundeffekte
   void setSoundEnabled(bool enabled) {
@@ -244,74 +175,56 @@ class GameProvider extends ChangeNotifier {
   
   /// Gibt die aktuelle Lautstärke zurück
   double get volume => _audioService.volume;
-
-  // Player Information Getters
-  PlayerColor get currentPlayerColor => _ludoGame.currentPlayer;
-  int get currentDiceValue => _ludoGame.diceValue;
-  List<Piece> get allBoardPieces => _ludoGame.allPieces;
-  Player getPlayerMeta(PlayerColor color) => 
-      _gameState.players.firstWhere((p) => p.id == color, orElse: () {
-        // Fallback for safety, though this should ideally not happen if players are set up correctly.
-        print("Error: Player metadata not found for color $color. Returning a default Player object.");
-        return Player(color, "Unknown Player", isAI: true);
-      });
-
+  
   /// Startet ein neues Spiel mit den angegebenen Spielern
-  void startNewGame(List<Player> playersFromUI) {
-    _ludoGame = LudoGame(); // Re-initialize LudoGame with its own player/piece setup
-    // LudoGame's constructor should set up its own pieces based on PlayerColor.values
+  void startNewGame(List<Player> players) {
+    final startIndices = <String, int>{
+      'player1': 0,
+      'player2': 10,
+      'player3': 20,
+      'player4': 30,
+    };
     
-    _gameState.players = playersFromUI; // Store UI player list (names, AI status)
-    _gameState.currentTurnPlayerId = _ludoGame.currentPlayer; // Sync with LudoGame's starting player
-    _gameState.winnerId = null;
-    _gameState.lastDiceValue = 0;
-    _gameState.currentRollCount = 0;
+    // Setze die Startpositionen der Spieler auf ihre Heimatfelder
+    for (var player in players) {
+      player.tokenPositions = List.filled(GameState.tokensPerPlayer, GameState.basePosition);
+    }
+    
+    _gameState = GameState(
+      startIndex: startIndices,
+      players: players,
+      currentTurnPlayerId: players.first.id,
+      winnerId: null,
+    );
+    
+    _gameService = GameService(_gameState);
 
     // Record game played for all players
-    final playerNames = playersFromUI.map((p) => p.name).toList();
+    final playerNames = players.map((p) => p.name).toList();
     _statisticsService.recordGamePlayed(playerNames).catchError((e) {
-<<<<<<< HEAD
         // print("Error recording game played stats: $e"); // Removed avoid_print
     }); // Log error, don't block UI
-=======
-      print("Error recording game played stats: $e");
-    });
->>>>>>> archive-ludo-logic-update
 
     notifyListeners();
   }
 
+  /// Speichert das aktuelle Spiel
   Future<bool> saveGame({String? customName}) async {
-    // TODO: Properly serialize _ludoGame state into _gameState for saving.
-    // This requires LudoGame and its components (Piece, PiecePosition) to have toJson methods.
-    // For now, saving _gameState which might be missing critical LudoGame state.
-    // Example: _gameState.gameLogicState = _ludoGame.toJson();
-    print("WARN: Game saving is currently incomplete. LudoGame state is not fully serialized.");
     return await _saveLoadService.saveGame(_gameState, customName: customName);
   }
-
+  
+  /// Lädt ein gespeichertes Spiel nach Index
   Future<bool> loadGame(int index) async {
     final loadedState = await _saveLoadService.loadGame(index);
     if (loadedState != null) {
       _gameState = loadedState;
-      // TODO: Properly deserialize _ludoGame state from _gameState.
-      // This requires LudoGame and its components to have fromJson factory constructors.
-      // For now, _ludoGame is reset to its default initial state upon load.
-      // Example: _ludoGame = LudoGame.fromJson(_gameState.gameLogicState);
-      _ludoGame = LudoGame(); // Resets game logic to initial state.
-      // Attempt to sync some state if available and simple, e.g., current player from loaded _gameState
-      // This is highly dependent on what LudoGame.fromJson would do.
-      // _ludoGame.currentPlayer = _gameState.currentTurnPlayerId; // This might be problematic if pieces aren't set.
-      _gameState.currentTurnPlayerId = _ludoGame.currentPlayer; // More robust: reset to LudoGame's default
-      _gameState.lastDiceValue = _ludoGame.diceValue; // Reset dice
-
-      print("WARN: Game loading is currently incomplete. LudoGame state is not fully restored and is reset.");
+      _gameService = GameService(_gameState);
       notifyListeners();
       return true;
     }
     return false;
   }
-
+  
   /// Löscht ein gespeichertes Spiel
   Future<bool> deleteGame(int index) async {
     final result = await _saveLoadService.deleteGame(index);
